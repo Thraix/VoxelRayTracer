@@ -1,0 +1,9 @@
+<Frame name="FrameHeader" width="fill_parent" height="fill_parent" backgroundColor="#263238" spacing="0">
+  <Container verticalAlign="false" width="fill_parent" height="wrap_content" padding="10 5" backgroundColor="#263238" borderColor="#90a4ae" border="1" spacing="0">
+    <Label height="fill_parent" name="title" color="#90a4ae" font="noto" fontSize="14">VoxelTracer </Label>
+    <Label height="fill_parent" font="noto" color="#90a4ae" fontSize="14">FPS: </Label>
+    <Label height="fill_parent" name="fpsCounter" color="#90a4ae" font="noto" fontSize="14">00</Label>
+  </Container>
+  <SceneView name="scene" width="fill_parent" height="fill_parent"/>
+
+</Frame>

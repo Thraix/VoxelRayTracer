@@ -1,0 +1,13 @@
+{
+  "basePath": "res/textures/",
+  "textures":
+  [
+    {
+      "name": "skybox",
+      "type": "CubeMap"
+    },
+    {
+      "name": "earth"
+    }
+  ]
+}
