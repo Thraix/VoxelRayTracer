@@ -4,52 +4,57 @@ using namespace Greet;
 class AppScene : public Scene
 {
   public:
-    std::shared_ptr<Shader> shader;
-    std::shared_ptr<VertexArray> vao;
-    std::shared_ptr<Buffer> vbo;
-    std::shared_ptr<Buffer> ibo;
+    Ref<Shader> shader;
+    Ref<VertexArray> vao;
+    Ref<VertexBuffer> vbo;
+    Ref<Buffer> ibo;
     Mat4 projectionMatrix;
     Mat4 viewMatrix;
     Mat4 pvInvMatrix;
     std::shared_ptr<Skybox> skybox;
     float timer = 0;
+    Ref<uint> texture3D;
 
     AppScene()
     {
-      Vec2 screen[4] = 
-      {
-        {-1.0f,  1.0f},
-        { 1.0f,  1.0f},
-        { 1.0f, -1.0f},
-        {-1.0f, -1.0f}
-      };
-      uint indices[6] = 
-      {
-        0, 2, 1,
-        0, 3, 2
-      };
+      Vec2 screen[4] = {
+        {-1.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, -1.0f}, {-1.0f, -1.0f}};
+      uint indices[6] = {0, 2, 1, 0, 3, 2};
 
-      vao.reset(new VertexArray{});
+      vao = VertexArray::Create();
       vao->Enable();
-      vbo.reset(new Buffer{sizeof(screen), BufferType::ARRAY, BufferDrawType::STATIC});
-
-      uint positionLocation = 0;//glGetAttribLocation(shader.GetProgram(), "a_Position");
-
-      vbo->Enable();
-      vbo->UpdateData(screen);
-      GLCall(glVertexAttribPointer(positionLocation, 2, GL_FLOAT, GL_FALSE, 0, 0));
-      GLCall(glEnableVertexAttribArray(positionLocation));
+      vbo = VertexBuffer::CreateDynamic(screen, sizeof(screen));
+      vbo->SetStructure({{0, BufferAttributeType::VEC2}});
+      vao->AddVertexBuffer(vbo);
       vbo->Disable();
 
-      ibo.reset(new Buffer{sizeof(indices), BufferType::INDEX, BufferDrawType::STATIC});
-      ibo->Enable();
+      ibo = Buffer::Create(sizeof(indices), BufferType::INDEX, BufferDrawType::STATIC);
       ibo->UpdateData(indices);
       ibo->Disable();
 
+      vao->SetIndexBuffer(ibo);
       vao->Disable();
-      shader.reset(new Shader{Shader::FromFile("res/shaders/raytrace.shader")});
+      int size = 16;
+      std::vector<float> data = Greet::Noise::GenNoise(size,size,size,3,4,4,4,2,0,0,0);
+      /* static std::vector<float> GenNoise(uint width, uint height, uint length, uint octave, uint stepX, uint stepY, uint stepZ, float persistance, int offsetX, int offsetY, int offsetZ); */
+      shader = Shader::FromFile("res/shaders/voxel.glsl");
+      shader->Enable();
+      shader->Disable();
       skybox.reset(new Skybox(TextureManager::Get3D("skybox")));
-
+      uint tex;
+      GLCall(glGenTextures(1, &tex));
+      byte bytes[size * size * size];
+      int i = 0;
+      for(float d : data)
+      {
+        bytes[i] = d * 255;
+        i++;
+      }
+      glBindTexture(GL_TEXTURE_3D, tex);
+      GLCall(glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER,  GL_NEAREST));
+      GLCall(glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+      GLCall(glTexImage3D(GL_TEXTURE_3D, 0, GL_RED, size, size, size, 0, GL_RED, GL_UNSIGNED_BYTE, bytes));
+      texture3D.reset(new uint{tex});
     }
 
     virtual void Render() const override
@@ -57,24 +62,25 @@ class AppScene : public Scene
       skybox->Render(projectionMatrix, viewMatrix);
 
       shader->Enable();
-      TextureManager::Get2D("earth").Enable();
+      TextureManager::Get2D("earth").Enable(0);
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_3D, *texture3D);
       shader->SetUniform1i("u_TextureUnit", 0);
+      shader->SetUniform1i("u_ChunkTexUnit", 1);
       shader->SetUniformMat4("u_PVInvMatrix", pvInvMatrix);
       shader->SetUniformMat4("u_ViewMatrix", viewMatrix);
       vao->Enable();
-      ibo->Enable();
-      GLCall(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0));
-      ibo->Disable();
+      vao->Render(DrawType::TRIANGLES, 6);
       vao->Disable();
       shader->Disable();
-
     }
 
     virtual void Update(float timeElapsed) override
     {
       timer += timeElapsed;
-      viewMatrix = Mat4::Translate(0,0,-10) * Mat4::RotateRY(-timer);
-      projectionMatrix = Mat4::ProjectionMatrix(RenderCommand::GetViewportAspect(), 90, 0.01, 100.0f);
+      viewMatrix = Mat4::Translate(0, 0, -10) * Mat4::RotateRY(-timer);
+      projectionMatrix = Mat4::ProjectionMatrix(
+          RenderCommand::GetViewportAspect(), 90, 0.01, 100.0f);
       pvInvMatrix = Mat4::Inverse(projectionMatrix * viewMatrix);
     }
 };
@@ -82,13 +88,11 @@ class AppScene : public Scene
 class Application : public App
 {
   public:
-
     Label* fpsLabel = nullptr;
     SceneView* sceneView = nullptr;
     AppScene* appScene;
 
-    Application()
-      : App{"RayTracer", 1440, 810}
+    Application() : App{"RayTracer", 1440, 810}
     {
       SetFrameCap(60);
     }
@@ -96,23 +100,25 @@ class Application : public App
     void Init() override
     {
       Loaders::LoadTextures("res/loaders/textures.json");
-      FontManager::Add(new FontContainer("res/fonts/NotoSansUI-Regular.ttf", "noto"));
+      FontManager::Add(
+          new FontContainer("res/fonts/NotoSansUI-Regular.ttf", "noto"));
       InitGUI();
       InitScene();
     }
 
     void InitGUI()
     {
-      GUIScene* scene = new GUIScene(new GUIRenderer(), Shader::FromFile("res/shaders/gui.shader"));
+      GUIScene* scene = new GUIScene(new GUIRenderer(),
+          Shader::FromFile("res/shaders/gui.shader"));
       scene->AddFrame(FrameFactory::GetFrame("res/guis/header.xml"));
 
-      if(auto frame = scene->GetFrame("FrameHeader"))
+      if (auto frame = scene->GetFrame("FrameHeader"))
       {
         fpsLabel = frame->GetComponentByName<Label>("fpsCounter");
-        if(!fpsLabel)
+        if (!fpsLabel)
           Log::Error("Couldn't find Label");
         sceneView = frame->GetComponentByName<SceneView>("scene");
-        if(!sceneView)
+        if (!sceneView)
           Log::Error("Couldn't find SceneView");
       }
       else
@@ -131,17 +137,15 @@ class Application : public App
 
     void Tick() override
     {
-      if(fpsLabel)
+      if (fpsLabel)
         fpsLabel->SetText(std::to_string(GetFPS()));
     }
 
     void Render() override
-    {
-    }
+    {}
 
     void Update(float timeElapsed) override
-    {
-    }
+    {}
 
     void OnEvent(Event& e) override
     {}

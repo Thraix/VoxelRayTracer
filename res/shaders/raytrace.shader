@@ -114,7 +114,7 @@ void main()
       {
         if(tY1 < tY2)
           tY = tY1;
-        else 
+        else
           tY = tY2;
       }
       else if(tY1 > 0)
