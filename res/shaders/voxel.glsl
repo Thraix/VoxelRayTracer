@@ -11,11 +11,14 @@ uniform sampler2D u_TextureUnit;
 uniform sampler3D u_ChunkTexUnit;
 uniform samplerCube u_SkyboxUnit;
 
+uniform float u_MaxRecursionDepth = 3;
+uniform float u_MaxRayLength = 100;
+
 bool HasVoxel(vec3 coord)
 {
   if(coord.x < 0 || coord.y < 0 || coord.z < 0 || coord.x > 15 || coord.y > 15 || coord.z > 15)
     return false;
-  return texture(u_ChunkTexUnit, coord/16).r > 0.65;
+  return texture(u_ChunkTexUnit, coord/16).r > 0.6;
 }
 
 struct Ray
@@ -23,32 +26,46 @@ struct Ray
   vec3 pos;
   vec3 dir;
   float rayLength;
-  int recursiveDepth;
+  float energy;
+  float recursiveDepth;
 };
 
+bool TestCube(vec3 currentPos, vec3 dir, vec3 centerPos, vec3 size)
+{
+  if(currentPos.x > centerPos.x + size.x / 2 && dir.x > 0)
+    return false;
+  if(currentPos.x < centerPos.x - size.x / 2 && dir.x < 0)
+    return false;
+  if(currentPos.y > centerPos.y + size.y / 2 && dir.y > 0)
+    return false;
+  if(currentPos.y < centerPos.y - size.y / 2 && dir.y < 0)
+    return false;
+  if(currentPos.z > centerPos.z + size.z / 2 && dir.z > 0)
+    return false;
+  if(currentPos.z < centerPos.z - size.z / 2 && dir.z < 0)
+    return false;
+  return true;
+}
 
+float CalcEnergy(Ray ray, float block)
+{
+  return pow((ray.energy * 2/4),2);
+}
 
 vec4 RayCast(vec3 pos, vec3 dir)
 {
-  vec3 unitDir = normalize(dir);
-
-  Ray ray;
-  ray.pos = pos;
-  ray.dir = unitDir;
-  ray.rayLength  = 0;
-  ray.recursiveDepth = 1;
-
   Ray rays[10];
   int rayCount = 1;
-  rays[0] = ray;
-  rays[1].recursiveDepth = 3;
+  rays[0].pos = pos;
+  rays[0].dir = normalize(dir);
+  rays[0].rayLength = 0;
+  rays[0].energy = 1;
+  rays[0].recursiveDepth = 1;
 
   vec4 color = vec4(0,0,0,0);
 
-  for(int i = 0;i<rays.length;i++)
+  for(int i = 0;i<rayCount;i++)
   {
-    if(rays[i].recursiveDepth >= 3)
-      break;
     float rayLengthTotal = rays[i].rayLength;
     float rayLength = 0;
     vec3 currentPos = rays[i].pos;
@@ -61,13 +78,18 @@ vec4 RayCast(vec3 pos, vec3 dir)
 
     vec3 t = (nextPlane - rays[i].pos) / rays[i].dir;
 
-    while(rayLengthTotal < 50)
+    while(rayLengthTotal < u_MaxRayLength)
     {
-      float tMin = min(t.x, min(t.y, t.z));
-      if(tMin < 0)
+      if(!TestCube(currentPos, rays[i].dir, vec3(8,8,8), vec3(16,16,16)))
       {
-        return color * vec4(1,0,1,1);
+        rayLengthTotal = u_MaxRayLength;
+        break;
       }
+      float tMin = min(t.x, min(t.y, t.z));
+      /* if(tMin < 0) */
+      /* { */
+      /*   return color * vec4(1,0,1,1); */
+      /* } */
       t -= tMin;
       rayLengthTotal += tMin;
       rayLength += tMin;
@@ -77,13 +99,17 @@ vec4 RayCast(vec3 pos, vec3 dir)
       {
         if(HasVoxel(currentPos + vec3(stepDir.x * 0.5,0,0)))
         {
-          rays[rayCount].pos = currentPos;
-          rays[rayCount].dir = vec3(-unitDir.x, unitDir.y, unitDir.z);
-          rays[rayCount].rayLength = rayLengthTotal;
-          rays[rayCount].recursiveDepth = rays[i].recursiveDepth + 1;
-          rays[rayCount+1].recursiveDepth = 3;
-          rayCount++;
-          color += vec4(texture(u_TextureUnit, currentPos.zy - floor(currentPos.zy)).xyz /(rays[i].recursiveDepth+1), 1.0);
+          if(rays[i].recursiveDepth < u_MaxRecursionDepth && rayCount < rays.length)
+          {
+            rays[rayCount].pos = currentPos;
+            rays[rayCount].dir = vec3(-rays[i].dir.x, rays[i].dir.y, rays[i].dir.z);
+            rays[rayCount].rayLength = rayLengthTotal;
+            rays[rayCount].recursiveDepth = rays[i].recursiveDepth + 1;
+            rays[rayCount].energy = CalcEnergy(rays[i], 1.0f);
+            rays[rayCount+1].recursiveDepth = u_MaxRecursionDepth;
+            rayCount++;
+          }
+          color += vec4(texture(u_TextureUnit, currentPos.zy - floor(currentPos.zy)).xyz * rays[i].energy, 1.0);
           break;
         }
         t.x = (currentPos.x + stepDir.x - rays[i].pos.x) / rays[i].dir.x - rayLength;
@@ -92,13 +118,17 @@ vec4 RayCast(vec3 pos, vec3 dir)
       {
         if(HasVoxel(currentPos + vec3(0, stepDir.y * 0.5,0)))
         {
-          rays[rayCount].pos = currentPos;
-          rays[rayCount].dir = vec3(unitDir.x, -unitDir.y, unitDir.z);
-          rays[rayCount].rayLength = rayLengthTotal;
-          rays[rayCount].recursiveDepth = rays[i].recursiveDepth + 1;
-          rays[rayCount+1].recursiveDepth = 3;
-          rayCount++;
-          color += vec4(texture(u_TextureUnit, currentPos.xz - floor(currentPos.xz)).xyz /(rays[i].recursiveDepth+1), 1.0);
+          if(rays[i].recursiveDepth < u_MaxRecursionDepth && rayCount < rays.length)
+          {
+            rays[rayCount].pos = currentPos;
+            rays[rayCount].dir = vec3(rays[i].dir.x, -rays[i].dir.y, rays[i].dir.z);
+            rays[rayCount].rayLength = rayLengthTotal;
+            rays[rayCount].recursiveDepth = rays[i].recursiveDepth + 1;
+            rays[rayCount].energy = CalcEnergy(rays[i], 1.0f);
+            rays[rayCount+1].recursiveDepth = u_MaxRecursionDepth;
+            rayCount++;
+          }
+          color += vec4(texture(u_TextureUnit, currentPos.xz - floor(currentPos.xz)).xyz * rays[i].energy, 1.0);
           break;
         }
         t.y = (currentPos.y + stepDir.y - rays[i].pos.y) / rays[i].dir.y - rayLength;
@@ -107,20 +137,24 @@ vec4 RayCast(vec3 pos, vec3 dir)
       {
         if(HasVoxel(currentPos + vec3(0, 0, stepDir.z * 0.5)))
         {
-          rays[rayCount].pos = currentPos;
-          rays[rayCount].dir = vec3(unitDir.x, unitDir.y, -unitDir.z);
-          rays[rayCount].rayLength = rayLengthTotal;
-          rays[rayCount].recursiveDepth = rays[i].recursiveDepth + 1;
-          rays[rayCount+1].recursiveDepth = 3;
-          rayCount++;
-          color += vec4(texture(u_TextureUnit, currentPos.xy - floor(currentPos.xy)).xyz / (rays[i].recursiveDepth+1), 1.0);
+          if(rays[i].recursiveDepth < u_MaxRecursionDepth && rayCount < rays.length)
+          {
+            rays[rayCount].pos = currentPos;
+            rays[rayCount].dir = vec3(rays[i].dir.x, rays[i].dir.y, -rays[i].dir.z);
+            rays[rayCount].rayLength = rayLengthTotal;
+            rays[rayCount].recursiveDepth = rays[i].recursiveDepth + 1;
+            rays[rayCount].energy = CalcEnergy(rays[i], 1.0f);
+            rays[rayCount+1].recursiveDepth = u_MaxRecursionDepth;
+            rayCount++;
+          }
+          color += vec4(texture(u_TextureUnit, currentPos.xy - floor(currentPos.xy)).xyz * rays[i].energy, 1.0);
           break;
         }
         t.z = (currentPos.z + stepDir.z - rays[i].pos.z) / rays[i].dir.z - rayLength;
       }
     }
-    if(rayLengthTotal > 50)
-      color += vec4(texture(u_SkyboxUnit, rays[i].dir).xyz/rays[i].recursiveDepth,1.0);
+    if(rayLengthTotal >= u_MaxRayLength)
+      color += vec4(texture(u_SkyboxUnit, rays[i].dir).xyz * rays[i].energy,1.0);
   }
   return color;
 }
