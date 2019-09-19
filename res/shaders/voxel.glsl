@@ -1,5 +1,5 @@
 //vertex
-#version 330 core
+#version 450 core
 
 layout(location = 0) in vec2 a_Position;
 
@@ -23,7 +23,7 @@ void main()
 }
 
 //fragment
-#version 330 core
+#version 450 core
 
 in vec3 v_Near;
 in vec3 v_Dir;
@@ -34,109 +34,107 @@ out vec4 f_Color;
 const float sphereRad = 2.0f;
 uniform sampler2D u_TextureUnit;
 uniform sampler3D u_ChunkTexUnit;
+uniform samplerCube u_SkyboxUnit;
 
-void main()
+bool HasVoxel(vec3 coord)
 {
-  vec3 unitDir = normalize(v_Dir);
-  float depth = 0;
-  bool hasSet = false;
-  for(int j = 0;j<16;j++)
+  if(coord.x < 0 || coord.y < 0 || coord.z < 0 || coord.x > 15 || coord.y > 15 || coord.z > 15)
+    return false;
+  return texture(u_ChunkTexUnit, coord/16).r > 0.5;
+}
+
+struct Ray
+{
+  vec3 pos;
+  vec3 dir;
+  float rayLength;
+  int recursiveDepth;
+};
+
+vec4 RayCast(vec3 pos, vec3 dir)
+{
+  vec3 unitDir = normalize(dir);
+
+  Ray ray;
+  ray.pos = pos;
+  ray.dir = unitDir;
+  ray.rayLength  = 0;
+  ray.recursiveDepth = 1;
+
+  Ray rays[10];
+  int rayCount = 1;
+  rays[0] = ray;
+  rays[1].recursiveDepth = 3;
+
+  vec4 color = vec4(0,0,0, 0);
+
+  for(int i = 0;i<rays.length;i++)
   {
-    for(int i = 0;i<16;i++)
+    if(rays[i].recursiveDepth >= 3)
+      break;
+    float rayLength = 0;
+    vec3 currentPos = pos;
+    vec3 nextPlane = vec3(
+        unitDir.x < 0 ? floor(currentPos.x) : ceil(currentPos.x),
+        unitDir.y < 0 ? floor(currentPos.y) : ceil(currentPos.y),
+        unitDir.z < 0 ? floor(currentPos.z) : ceil(currentPos.z));
+
+    vec3 stepDir = rays[i].dir / abs(rays[i].dir);
+
+    vec3 t = (nextPlane - rays[i].pos) / rays[i].dir;
+
+    while(rayLength < 50)
     {
-      if(texture(u_ChunkTexUnit, vec3((i + 0.5)/16,(j + 0.5)/16,0.5/16)).r < 0.5)
-        continue;
-      vec3 pos = vec3(i,j,0);
-
-      float tX1  = (pos.x - v_Near.x) / unitDir.x;
-      float tX2  = (pos.x + 1.0f - v_Near.x) / unitDir.x;
-
-      float tX = 0;
-      if(tX1 > 0 || tX2 > 0)
+      float tMin = min(t.x, min(t.y, t.z));
+      if(tMin < 0)
       {
-        if(tX1 > 0 && tX2 > 0)
-        {
-          if(tX1 < tX2)
-            tX = tX1;
-          else 
-            tX = tX2;
-        }
-        else if(tX1 > 0)
-          tX = tX1;
-        else
-          tX = tX2;
-        if(tX < depth || !hasSet)
-        {
-          vec3 pX = v_Near + unitDir * tX;
-          if(pX.y < pos.y+1 && pX.y > pos.y && pX.z < pos.z+1 && pX.z > pos.z)
-          {
-            float shade = 1 - length(pX.yz - pos.yz - 0.5);
-            f_Color = vec4(shade,shade,shade,1);
-            depth = tX;
-            hasSet = true;
-          }
-        }
+        f_Color = vec4(t,1);
+        return vec4(t,1);
       }
+      t -= tMin;
+      rayLength += tMin; 
+      currentPos = rays[i].pos + rayLength * rays[i].dir; 
 
-      float tY1  = (pos.y - v_Near.y) / unitDir.y;
-      float tY2  = (pos.y + 1 - v_Near.y) / unitDir.y;
-
-      float tY = 0;
-      if(tY1 > 0 || tY2 > 0)
+      if(t.x == 0)
       {
-        if(tY1 > 0 && tY2 > 0)
+        if(HasVoxel(currentPos + vec3(stepDir.x * 0.5,0,0)))
         {
-          if(tY1 < tY2)
-            tY = tY1;
-          else
-            tY = tY2;
+          rays[rayCount].pos = currentPos;
+          rays[rayCount].dir = reflect(unitDir, vec3(-stepDir.x,0,0));
+          rays[rayCount].rayLength = rayLength;
+          //rays[rayCount].recursiveDepth = rays[i].recursiveDepth + 1;
+          rays[rayCount].pos = currentPos;
+          rays[rayCount+1].recursiveDepth = 3;
+          rayCount++;
+          color += vec4(texture(u_TextureUnit, currentPos.zy - floor(currentPos.zy)).xyz, 1.0);
+          break;
         }
-        else if(tY1 > 0)
-          tY = tY1;
-        else
-          tY = tY2;
-        if(tY < depth || !hasSet)
-        {
-          vec3 pY = v_Near + unitDir * tY;
-          if(pY.x < pos.x+1 && pY.x > pos.x && pY.z < pos.z+1 && pY.z > pos.z)
-          {
-            float shade = 1 - length(pY.xz - pos.xz - 0.5);
-            f_Color = vec4(shade,shade,shade,1);
-            depth = tY;
-            hasSet = true;
-          }
-        }
+        t.x = (currentPos.x + stepDir.x - pos.x) / unitDir.x - rayLength;
       }
-
-      float tZ1  = (pos.z - v_Near.z) / unitDir.z;
-      float tZ2  = (pos.z + 1 - v_Near.z) / unitDir.z;
-
-      float tZ = 0;
-      if(tZ1 > 0 || tZ2 > 0)
+      else if(t.y == 0)
       {
-        if(tZ1 > 0 && tZ2 > 0)
+        if(HasVoxel(currentPos + vec3(0, stepDir.y * 0.5,0)))
         {
-          if(tZ1 < tZ2)
-            tZ = tZ1;
-          else 
-            tZ = tZ2;
+          color += vec4(texture(u_TextureUnit, currentPos.xz - floor(currentPos.xz)).xyz, 1.0);
+          break;
         }
-        else if(tZ1 > 0)
-          tZ = tZ1;
-        else
-          tZ = tZ2;
-        if(tZ < depth || !hasSet)
+        t.y = (currentPos.y + stepDir.y - pos.y) / unitDir.y - rayLength;
+      }
+      else if(t.z == 0)
+      {
+        if(HasVoxel(currentPos + vec3(0, 0, stepDir.z * 0.5)))
         {
-          vec3 pZ = v_Near + unitDir * tZ;
-          if(pZ.x < pos.x+1 && pZ.x > pos.x && pZ.y < pos.y+1 && pZ.y > pos.y)
-          {
-            float shade = 1 - length(pZ.xy - pos.xy - 0.5);
-            f_Color = vec4(shade,shade,shade,1);
-            depth = tZ;
-            hasSet = true;
-          }
+          color += vec4(texture(u_TextureUnit, currentPos.xy - floor(currentPos.xy)).xyz, 1.0);
+          break;
         }
+        t.z = (currentPos.z + stepDir.z - pos.z) / unitDir.z - rayLength;
       }
     }
   }
+  return color;
+}
+
+void main()
+{
+  f_Color = RayCast(v_Near + vec3(8,8,8), v_Dir);
 }
