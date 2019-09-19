@@ -11,7 +11,6 @@ class AppScene : public Scene
     Mat4 projectionMatrix;
     Mat4 viewMatrix;
     Mat4 pvInvMatrix;
-    std::shared_ptr<Skybox> skybox;
     float timer = 0;
     Ref<uint> texture3D;
 
@@ -40,7 +39,6 @@ class AppScene : public Scene
       shader = Shader::FromFile("res/shaders/voxel.glsl");
       shader->Enable();
       shader->Disable();
-      skybox.reset(new Skybox(TextureManager::Get3D("skybox")));
       uint tex;
       GLCall(glGenTextures(1, &tex));
       byte bytes[size * size * size];
@@ -59,14 +57,14 @@ class AppScene : public Scene
 
     virtual void Render() const override
     {
-      skybox->Render(projectionMatrix, viewMatrix);
-
       shader->Enable();
-      TextureManager::Get2D("earth").Enable(0);
+      TextureManager::Get2D("stone").Enable(0);
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_3D, *texture3D);
+      TextureManager::Get3D("skybox").Enable(2);
       shader->SetUniform1i("u_TextureUnit", 0);
       shader->SetUniform1i("u_ChunkTexUnit", 1);
+      shader->SetUniform1i("u_SkyboxUnit", 2);
       shader->SetUniformMat4("u_PVInvMatrix", pvInvMatrix);
       shader->SetUniformMat4("u_ViewMatrix", viewMatrix);
       vao->Enable();
@@ -78,7 +76,7 @@ class AppScene : public Scene
     virtual void Update(float timeElapsed) override
     {
       timer += timeElapsed;
-      viewMatrix = Mat4::Translate(0, 0, -10) * Mat4::RotateRY(-timer);
+      viewMatrix = Mat4::Translate(0, 0, -15) * Mat4::RotateRY(-timer/5);
       projectionMatrix = Mat4::ProjectionMatrix(
           RenderCommand::GetViewportAspect(), 90, 0.01, 100.0f);
       pvInvMatrix = Mat4::Inverse(projectionMatrix * viewMatrix);
