@@ -38,6 +38,7 @@ class AppScene : public Scene
       /* static std::vector<float> GenNoise(uint width, uint height, uint length, uint octave, uint stepX, uint stepY, uint stepZ, float persistance, int offsetX, int offsetY, int offsetZ); */
       shader = Shader::FromFile("res/shaders/voxel.glsl");
       shader->Enable();
+      shader->SetUniform1i("u_Size", size);
       shader->Disable();
       uint tex;
       GLCall(glGenTextures(1, &tex));
@@ -60,13 +61,15 @@ class AppScene : public Scene
     {
       static int index = 0;
       shader->Enable();
-      TextureManager::Get2D("stone").Enable(0);
+      TextureManager::Get2D("concrete").Enable(0);
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_3D, *texture3D);
       TextureManager::Get3D("skybox").Enable(2);
+      TextureManager::Get2D("stone").Enable(3);
       shader->SetUniform1i("u_TextureUnit", 0);
       shader->SetUniform1i("u_ChunkTexUnit", 1);
       shader->SetUniform1i("u_SkyboxUnit", 2);
+      shader->SetUniform1i("u_TextureUnit2", 3);
       shader->SetUniformMat4("u_PVInvMatrix", pvInvMatrix);
       shader->SetUniformMat4("u_ViewMatrix", viewMatrix);
       vao->Enable();

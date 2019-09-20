@@ -7,7 +7,14 @@
       "type": "CubeMap"
     },
     {
-      "name": "stone"
+      "name": "concrete",
+      "path": "concrete16.png",
+      "filter": "nearest"
+    },
+    {
+      "name": "stone",
+      "path": "grass16.png",
+      "filter": "nearest"
     }
   ]
 }

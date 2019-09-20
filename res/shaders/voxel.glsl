@@ -8,17 +8,26 @@ in vec3 v_CameraPos;
 out vec4 f_Color;
 
 uniform sampler2D u_TextureUnit;
+uniform sampler2D u_TextureUnit2;
 uniform sampler3D u_ChunkTexUnit;
 uniform samplerCube u_SkyboxUnit;
 
 uniform float u_MaxRecursionDepth = 3;
-uniform float u_MaxRayLength = 100;
+uniform float u_MaxRayLength = 200;
+uniform int u_Size;
 
-bool HasVoxel(vec3 coord)
+const int MAX_RAYS = 3;
+
+bool HasVoxel(float value)
 {
-  if(coord.x < 0 || coord.y < 0 || coord.z < 0 || coord.x > 15 || coord.y > 15 || coord.z > 15)
-    return false;
-  return texture(u_ChunkTexUnit, coord/16).r > 0.6;
+  return value > 0.6;
+}
+
+float GetVoxel(vec3 coord)
+{
+  if(coord.x < 0 || coord.y < 0 || coord.z < 0 || coord.x > u_Size - 1|| coord.y > u_Size - 1 || coord.z > u_Size - 1)
+    return 0;
+  return texture(u_ChunkTexUnit, coord/u_Size).r;
 }
 
 struct Ray
@@ -50,12 +59,36 @@ bool TestCube(vec3 currentPos, vec3 dir, vec3 centerPos, vec3 size)
 
 float CalcEnergy(Ray ray, float block)
 {
-  return pow((ray.energy * 2/4),2);
+  if(block < 0.65)
+    return 0.6;//pow((ray.energy * 3/4),2);
+  else
+    return pow((ray.energy * 1/4),2);
+}
+
+void RayCollision(Ray ray, float voxel, vec3 currentPos, float rayLengthTotal, int collisionDir, int axis1, int axis2, inout Ray rays[MAX_RAYS], inout int rayCount, inout vec4 color)
+{
+  if(ray.recursiveDepth < u_MaxRecursionDepth && rayCount < MAX_RAYS)
+  {
+    rays[rayCount].pos = currentPos;
+    rays[rayCount].dir = ray.dir;
+    rays[rayCount].dir[collisionDir] = -ray.dir[collisionDir];
+    rays[rayCount].rayLength = rayLengthTotal;
+    rays[rayCount].recursiveDepth = ray.recursiveDepth + 1;
+    rays[rayCount].energy = CalcEnergy(ray, voxel);
+    rays[rayCount].shadowRay = false;
+    rayCount++;
+  }
+  vec2 texCoord = vec2(currentPos[axis1], currentPos[axis2]);
+  if(voxel < 0.65)
+    //color += vec4(texture(u_TextureUnit, texCoord).xyz * ray.energy, 1.0);
+    ;
+  else
+    color += vec4(texture(u_TextureUnit2, texCoord).xyz * ray.energy, 1.0);
 }
 
 vec4 RayCast(vec3 pos, vec3 dir)
 {
-  Ray rays[3];
+  Ray rays[MAX_RAYS];
   int rayCount = 1;
   rays[0].pos = pos;
   rays[0].dir = normalize(dir);
@@ -82,7 +115,7 @@ vec4 RayCast(vec3 pos, vec3 dir)
 
     while(rayLengthTotal < u_MaxRayLength)
     {
-      if(!TestCube(currentPos, rays[i].dir, vec3(8,8,8), vec3(16,16,16)))
+      if(!TestCube(currentPos, rays[i].dir, vec3(u_Size*0.5), vec3(u_Size)))
       {
         rayLengthTotal = u_MaxRayLength;
         break;
@@ -99,60 +132,30 @@ vec4 RayCast(vec3 pos, vec3 dir)
 
       if(t.x == 0)
       {
-        if(HasVoxel(currentPos + vec3(stepDir.x * 0.5,0,0)))
+        float voxel = GetVoxel(currentPos + vec3(stepDir.x * 0.5,0,0));
+        if(HasVoxel(voxel))
         {
-          if(rays[i].recursiveDepth < u_MaxRecursionDepth && rayCount < rays.length)
-          {
-            rays[rayCount].pos = currentPos;
-            rays[rayCount].dir = vec3(-rays[i].dir.x, rays[i].dir.y, rays[i].dir.z);
-            rays[rayCount].rayLength = rayLengthTotal;
-            rays[rayCount].recursiveDepth = rays[i].recursiveDepth + 1;
-            rays[rayCount].energy = CalcEnergy(rays[i], 1.0f);
-            rays[rayCount].shadowRay = false;
-            rays[rayCount+1].recursiveDepth = u_MaxRecursionDepth;
-            rayCount++;
-          }
-          color += vec4(texture(u_TextureUnit, currentPos.zy - floor(currentPos.zy)).xyz * rays[i].energy, 1.0);
+          RayCollision(rays[i], voxel, currentPos, rayLengthTotal, 0, 2, 1, rays, rayCount, color);
           break;
         }
         t.x = (currentPos.x + stepDir.x - rays[i].pos.x) / rays[i].dir.x - rayLength;
       }
       else if(t.y == 0)
       {
-        if(HasVoxel(currentPos + vec3(0, stepDir.y * 0.5,0)))
+        float voxel = GetVoxel(currentPos + vec3(0, stepDir.y * 0.5,0));
+        if(HasVoxel(voxel))
         {
-          if(rays[i].recursiveDepth < u_MaxRecursionDepth && rayCount < rays.length)
-          {
-            rays[rayCount].pos = currentPos;
-            rays[rayCount].dir = vec3(rays[i].dir.x, -rays[i].dir.y, rays[i].dir.z);
-            rays[rayCount].rayLength = rayLengthTotal;
-            rays[rayCount].recursiveDepth = rays[i].recursiveDepth + 1;
-            rays[rayCount].energy = CalcEnergy(rays[i], 1.0f);
-            rays[rayCount].shadowRay = false;
-            rays[rayCount+1].recursiveDepth = u_MaxRecursionDepth;
-            rayCount++;
-          }
-          color += vec4(texture(u_TextureUnit, currentPos.xz - floor(currentPos.xz)).xyz * rays[i].energy, 1.0);
+          RayCollision(rays[i], voxel, currentPos, rayLengthTotal, 1, 0, 2, rays, rayCount, color);
           break;
         }
         t.y = (currentPos.y + stepDir.y - rays[i].pos.y) / rays[i].dir.y - rayLength;
       }
       else if(t.z == 0)
       {
-        if(HasVoxel(currentPos + vec3(0, 0, stepDir.z * 0.5)))
+        float voxel = GetVoxel(currentPos + vec3(0,0,stepDir.z * 0.5));
+        if(HasVoxel(voxel))
         {
-          if(rays[i].recursiveDepth < u_MaxRecursionDepth && rayCount < rays.length)
-          {
-            rays[rayCount].pos = currentPos;
-            rays[rayCount].dir = vec3(rays[i].dir.x, rays[i].dir.y, -rays[i].dir.z);
-            rays[rayCount].rayLength = rayLengthTotal;
-            rays[rayCount].recursiveDepth = rays[i].recursiveDepth + 1;
-            rays[rayCount].energy = CalcEnergy(rays[i], 1.0f);
-            rays[rayCount].shadowRay = false;
-            rays[rayCount+1].recursiveDepth = u_MaxRecursionDepth;
-            rayCount++;
-          }
-          color += vec4(texture(u_TextureUnit, currentPos.xy - floor(currentPos.xy)).xyz * rays[i].energy, 1.0);
+          RayCollision(rays[i], voxel, currentPos, rayLengthTotal, 2, 0, 1, rays, rayCount, color);
           break;
         }
         t.z = (currentPos.z + stepDir.z - rays[i].pos.z) / rays[i].dir.z - rayLength;
@@ -166,11 +169,7 @@ vec4 RayCast(vec3 pos, vec3 dir)
 
 void main()
 {
-  f_Color = RayCast(v_Near + vec3(8,8,8), v_Dir);
-  if(f_Color == vec4(0,0,0,0))
-  {
-    f_Color = texture(u_SkyboxUnit, normalize(v_Dir));
-  }
+  f_Color = RayCast(v_Near + vec3(u_Size*0.5), v_Dir);
 }
 
 //vertex
