@@ -28,6 +28,7 @@ struct Ray
   float rayLength;
   float energy;
   float recursiveDepth;
+  bool shadowRay;
 };
 
 bool TestCube(vec3 currentPos, vec3 dir, vec3 centerPos, vec3 size)
@@ -54,13 +55,14 @@ float CalcEnergy(Ray ray, float block)
 
 vec4 RayCast(vec3 pos, vec3 dir)
 {
-  Ray rays[10];
+  Ray rays[3];
   int rayCount = 1;
   rays[0].pos = pos;
   rays[0].dir = normalize(dir);
   rays[0].rayLength = 0;
   rays[0].energy = 1;
   rays[0].recursiveDepth = 1;
+  rays[0].shadowRay = false;
 
   vec4 color = vec4(0,0,0,0);
 
@@ -106,6 +108,7 @@ vec4 RayCast(vec3 pos, vec3 dir)
             rays[rayCount].rayLength = rayLengthTotal;
             rays[rayCount].recursiveDepth = rays[i].recursiveDepth + 1;
             rays[rayCount].energy = CalcEnergy(rays[i], 1.0f);
+            rays[rayCount].shadowRay = false;
             rays[rayCount+1].recursiveDepth = u_MaxRecursionDepth;
             rayCount++;
           }
@@ -125,6 +128,7 @@ vec4 RayCast(vec3 pos, vec3 dir)
             rays[rayCount].rayLength = rayLengthTotal;
             rays[rayCount].recursiveDepth = rays[i].recursiveDepth + 1;
             rays[rayCount].energy = CalcEnergy(rays[i], 1.0f);
+            rays[rayCount].shadowRay = false;
             rays[rayCount+1].recursiveDepth = u_MaxRecursionDepth;
             rayCount++;
           }
@@ -144,6 +148,7 @@ vec4 RayCast(vec3 pos, vec3 dir)
             rays[rayCount].rayLength = rayLengthTotal;
             rays[rayCount].recursiveDepth = rays[i].recursiveDepth + 1;
             rays[rayCount].energy = CalcEnergy(rays[i], 1.0f);
+            rays[rayCount].shadowRay = false;
             rays[rayCount+1].recursiveDepth = u_MaxRecursionDepth;
             rayCount++;
           }

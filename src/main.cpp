@@ -54,9 +54,11 @@ class AppScene : public Scene
       GLCall(glTexImage3D(GL_TEXTURE_3D, 0, GL_RED, size, size, size, 0, GL_RED, GL_UNSIGNED_BYTE, bytes));
       texture3D.reset(new uint{tex});
     }
+    inline static int fps = 0;
 
     virtual void Render() const override
     {
+      static int index = 0;
       shader->Enable();
       TextureManager::Get2D("stone").Enable(0);
       glActiveTexture(GL_TEXTURE1);
@@ -68,9 +70,16 @@ class AppScene : public Scene
       shader->SetUniformMat4("u_PVInvMatrix", pvInvMatrix);
       shader->SetUniformMat4("u_ViewMatrix", viewMatrix);
       vao->Enable();
+      glBeginQuery(GL_TIME_ELAPSED, index);
       vao->Render(DrawType::TRIANGLES, 6);
+      glEndQuery(GL_TIME_ELAPSED);
       vao->Disable();
       shader->Disable();
+      GLuint64 result;
+      glGetQueryObjectui64v(index, GL_QUERY_RESULT, &result);
+      index++;
+      float ms = result * 1e-6;
+      fps = 1000 / ms;
     }
 
     virtual void Update(float timeElapsed) override
@@ -136,7 +145,7 @@ class Application : public App
     void Tick() override
     {
       if (fpsLabel)
-        fpsLabel->SetText(std::to_string(GetFPS()));
+        fpsLabel->SetText(std::to_string(AppScene::fps));
     }
 
     void Render() override
