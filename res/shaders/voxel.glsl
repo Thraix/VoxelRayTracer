@@ -8,13 +8,15 @@ in vec3 v_CameraPos;
 out vec4 f_Color;
 
 uniform sampler2D u_TextureUnit;
-uniform sampler2D u_TextureUnit2;
 uniform sampler3D u_ChunkTexUnit;
 uniform samplerCube u_SkyboxUnit;
 
-uniform float u_MaxRecursionDepth = 3;
+uniform float u_MaxRecursionDepth = 10;
 uniform float u_MaxRayLength = 200;
 uniform int u_Size;
+uniform int u_AtlasSize;
+uniform int u_AtlasTextureSize;
+uniform vec3 u_SunDir;
 
 const int MAX_RAYS = 3;
 
@@ -25,7 +27,7 @@ bool HasVoxel(float value)
 
 float GetVoxel(vec3 coord)
 {
-  if(coord.x < 0 || coord.y < 0 || coord.z < 0 || coord.x > u_Size - 1|| coord.y > u_Size - 1 || coord.z > u_Size - 1)
+  if(coord.x < 0 || coord.y < 0 || coord.z < 0 || coord.x > u_Size|| coord.y > u_Size || coord.z > u_Size)
     return 0;
   return texture(u_ChunkTexUnit, coord/u_Size).r;
 }
@@ -60,30 +62,56 @@ bool TestCube(vec3 currentPos, vec3 dir, vec3 centerPos, vec3 size)
 float CalcEnergy(Ray ray, float block)
 {
   if(block < 0.65)
-    return 0.6;//pow((ray.energy * 3/4),2);
+    return pow(ray.energy * 0.8, 2);//pow((ray.energy * 2/4),2);
   else
-    return pow((ray.energy * 1/4),2);
+    return 0;//pow((ray.energy * 1/4),2);
+}
+
+vec2 GetTextureCoordinate(vec2 voxelPlane, int x, int y)
+{
+    vec2 texCoord = voxelPlane - floor(voxelPlane);
+    return texCoord = (vec2(texCoord.x + x,texCoord.y + (1 - y))) * u_AtlasTextureSize / u_AtlasSize;
 }
 
 void RayCollision(Ray ray, float voxel, vec3 currentPos, float rayLengthTotal, int collisionDir, int axis1, int axis2, inout Ray rays[MAX_RAYS], inout int rayCount, inout vec4 color)
 {
   if(ray.recursiveDepth < u_MaxRecursionDepth && rayCount < MAX_RAYS)
   {
-    rays[rayCount].pos = currentPos;
-    rays[rayCount].dir = ray.dir;
-    rays[rayCount].dir[collisionDir] = -ray.dir[collisionDir];
+    vec3 normal = vec3(0,0,0);
+    normal[collisionDir] = ray.dir[collisionDir] / abs(ray.dir[collisionDir]);
+    rays[rayCount].pos = currentPos - u_SunDir * 0.001;
+    rays[rayCount].dir = u_SunDir;
     rays[rayCount].rayLength = rayLengthTotal;
     rays[rayCount].recursiveDepth = ray.recursiveDepth + 1;
-    rays[rayCount].energy = CalcEnergy(ray, voxel);
-    rays[rayCount].shadowRay = false;
+    rays[rayCount].energy = (1.0 - clamp(dot(normal, u_SunDir), 0.0, 1.0)) / 2 + 0.5;
+    rays[rayCount].shadowRay = true;
     rayCount++;
   }
-  vec2 texCoord = vec2(currentPos[axis1], currentPos[axis2]);
-  if(voxel < 0.65)
-    //color += vec4(texture(u_TextureUnit, texCoord).xyz * ray.energy, 1.0);
-    ;
+  /* if(ray.recursiveDepth < u_MaxRecursionDepth && rayCount < MAX_RAYS) */
+  /* { */
+  /*   rays[rayCount].pos = currentPos; */
+  /*   rays[rayCount].dir = ray.dir; */
+  /*   rays[rayCount].dir[collisionDir] = -ray.dir[collisionDir]; */
+  /*   rays[rayCount].rayLength = rayLengthTotal; */
+  /*   rays[rayCount].recursiveDepth = ray.recursiveDepth + 1; */
+  /*   rays[rayCount].energy = CalcEnergy(ray, voxel); */
+  /*   rays[rayCount].shadowRay = false; */
+  /*   if(rays[rayCount].energy > 0.1) */
+  /*     rayCount++; */
+  /* } */
+  if(ray.shadowRay)
+  {
+    color.xyz *= ray.energy;
+  }
   else
-    color += vec4(texture(u_TextureUnit2, texCoord).xyz * ray.energy, 1.0);
+  {
+    vec2 texCoord;
+  if(voxel < 0.65)
+    texCoord = GetTextureCoordinate(vec2(currentPos[axis1], currentPos[axis2]),0,1);
+  else
+    texCoord = GetTextureCoordinate(vec2(currentPos[axis1], currentPos[axis2]),0,0);
+    color = mix(vec4(texture(u_TextureUnit, texCoord).xyz, 1.0), color, 1.0 - ray.energy);
+  }
 }
 
 vec4 RayCast(vec3 pos, vec3 dir)
@@ -97,7 +125,7 @@ vec4 RayCast(vec3 pos, vec3 dir)
   rays[0].recursiveDepth = 1;
   rays[0].shadowRay = false;
 
-  vec4 color = vec4(0,0,0,0);
+  vec4 color = vec4(0,0,0,1);
 
   for(int i = 0;i<rayCount;i++)
   {
@@ -161,8 +189,8 @@ vec4 RayCast(vec3 pos, vec3 dir)
         t.z = (currentPos.z + stepDir.z - rays[i].pos.z) / rays[i].dir.z - rayLength;
       }
     }
-    if(rayLengthTotal >= u_MaxRayLength)
-      color += vec4(texture(u_SkyboxUnit, rays[i].dir).xyz * rays[i].energy,1.0);
+    if(rayLengthTotal >= u_MaxRayLength && !rays[i].shadowRay)
+      color = mix(vec4(texture(u_SkyboxUnit, rays[i].dir).xyz, 1.0), color, 1.0 - rays[i].energy);
   }
   return color;
 }
@@ -184,7 +212,6 @@ out vec3 v_CameraPos;
 uniform mat4 u_ViewMatrix;
 uniform mat4 u_PVInvMatrix;
 uniform vec3 cameraPos;
-
 
 void main()
 {

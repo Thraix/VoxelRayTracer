@@ -7,13 +7,13 @@
       "type": "CubeMap"
     },
     {
-      "name": "concrete",
-      "path": "concrete16.png",
+      "name": "stone",
+      "path": "glass.png",
       "filter": "nearest"
     },
     {
-      "name": "stone",
-      "path": "grass16.png",
+      "name": "dirt",
+      "path": "dirt.png",
       "filter": "nearest"
     }
   ]
