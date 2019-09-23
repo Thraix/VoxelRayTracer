@@ -18,7 +18,7 @@ uniform int u_AtlasSize;
 uniform int u_AtlasTextureSize;
 uniform vec3 u_SunDir;
 
-const int MAX_RAYS = 3;
+const int MAX_RAYS = 2;
 
 bool HasVoxel(float value)
 {
@@ -69,8 +69,9 @@ float CalcEnergy(Ray ray, float block)
 
 vec2 GetTextureCoordinate(vec2 voxelPlane, int x, int y)
 {
-    vec2 texCoord = voxelPlane - floor(voxelPlane);
-    return texCoord = (vec2(texCoord.x + x,texCoord.y + (1 - y))) * u_AtlasTextureSize / u_AtlasSize;
+  vec2 texCoord = voxelPlane - floor(voxelPlane);
+  texCoord = vec2(texCoord.x + x, 1 - texCoord.y + y) * u_AtlasTextureSize / u_AtlasSize;
+  return vec2(texCoord.x, 1.0f - texCoord.y);
 }
 
 void RayCollision(Ray ray, float voxel, vec3 currentPos, float rayLengthTotal, int collisionDir, int axis1, int axis2, inout Ray rays[MAX_RAYS], inout int rayCount, inout vec4 color)
@@ -78,12 +79,16 @@ void RayCollision(Ray ray, float voxel, vec3 currentPos, float rayLengthTotal, i
   if(ray.recursiveDepth < u_MaxRecursionDepth && rayCount < MAX_RAYS)
   {
     vec3 normal = vec3(0,0,0);
-    normal[collisionDir] = ray.dir[collisionDir] / abs(ray.dir[collisionDir]);
-    rays[rayCount].pos = currentPos - u_SunDir * 0.001;
+    normal[collisionDir] = sign(ray.dir[collisionDir]);
+    float sig = sign(normal[collisionDir]) * sign(u_SunDir[collisionDir]);
+    rays[rayCount].pos = currentPos - u_SunDir * 0.0001 * sig;
     rays[rayCount].dir = u_SunDir;
     rays[rayCount].rayLength = rayLengthTotal;
     rays[rayCount].recursiveDepth = ray.recursiveDepth + 1;
-    rays[rayCount].energy = (1.0 - clamp(dot(normal, u_SunDir), 0.0, 1.0)) / 2 + 0.5;
+    if(sig < 0)
+      rays[rayCount].energy = (1.0 - pow(clamp(dot(-normal, u_SunDir), 0.0, 1.0),0.4)) / 2 + 0.5;
+    else
+      rays[rayCount].energy = (1.0 - pow(clamp(dot(normal, u_SunDir), 0.0, 1.0),0.4)) / 2 + 0.5;
     rays[rayCount].shadowRay = true;
     rayCount++;
   }
@@ -106,10 +111,10 @@ void RayCollision(Ray ray, float voxel, vec3 currentPos, float rayLengthTotal, i
   else
   {
     vec2 texCoord;
-  if(voxel < 0.65)
-    texCoord = GetTextureCoordinate(vec2(currentPos[axis1], currentPos[axis2]),0,1);
-  else
-    texCoord = GetTextureCoordinate(vec2(currentPos[axis1], currentPos[axis2]),0,0);
+    if(voxel < 0.65)
+      texCoord = GetTextureCoordinate(vec2(currentPos[axis1], currentPos[axis2]),0,1);
+    else
+      texCoord = GetTextureCoordinate(vec2(currentPos[axis1], currentPos[axis2]),0,0);
     color = mix(vec4(texture(u_TextureUnit, texCoord).xyz, 1.0), color, 1.0 - ray.energy);
   }
 }
@@ -127,6 +132,7 @@ vec4 RayCast(vec3 pos, vec3 dir)
 
   vec4 color = vec4(0,0,0,1);
 
+  float iterations = 0;
   for(int i = 0;i<rayCount;i++)
   {
     float rayLengthTotal = rays[i].rayLength;
@@ -137,12 +143,13 @@ vec4 RayCast(vec3 pos, vec3 dir)
         rays[i].dir.y < 0 ? ceil(currentPos.y-1) : floor(currentPos.y+1),
         rays[i].dir.z < 0 ? ceil(currentPos.z-1) : floor(currentPos.z+1));
 
-    vec3 stepDir = rays[i].dir / abs(rays[i].dir);
+    vec3 stepDir = sign(rays[i].dir);
 
     vec3 t = (nextPlane - rays[i].pos) / rays[i].dir;
 
     while(rayLengthTotal < u_MaxRayLength)
     {
+      iterations++;
       if(!TestCube(currentPos, rays[i].dir, vec3(u_Size*0.5), vec3(u_Size)))
       {
         rayLengthTotal = u_MaxRayLength;
@@ -192,6 +199,13 @@ vec4 RayCast(vec3 pos, vec3 dir)
     if(rayLengthTotal >= u_MaxRayLength && !rays[i].shadowRay)
       color = mix(vec4(texture(u_SkyboxUnit, rays[i].dir).xyz, 1.0), color, 1.0 - rays[i].energy);
   }
+  /* if(iterations == 1) */
+  /*   return vec4(1,0,0,1); */
+  /* if(iterations == 2) */
+  /*   return vec4(1,1,0,1); */
+  /* if(iterations == 3) */
+  /*   return vec4(1,0,1,1); */
+  /* return vec4(vec3(iterations / 0.0f),1); */
   return color;
 }
 

@@ -169,7 +169,6 @@ class AppScene : public Scene
       shader->Disable();
       uint tex;
       GLCall(glGenTextures(1, &tex));
-      byte bytes[size * size * size];
       int i = 0;
       for(int z = 0;z<size;z++)
       {
