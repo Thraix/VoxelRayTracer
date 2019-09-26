@@ -29,7 +29,7 @@ float GetVoxel(vec3 coord)
 {
   if(coord.x < 0 || coord.y < 0 || coord.z < 0 || coord.x > u_Size|| coord.y > u_Size || coord.z > u_Size)
     return 0;
-  return texture(u_ChunkTexUnit, coord/u_Size).r;
+  return texture(u_ChunkTexUnit, coord / u_Size).r;
 }
 
 struct Ray
@@ -40,6 +40,15 @@ struct Ray
   float energy;
   float recursiveDepth;
   bool shadowRay;
+};
+
+struct RayIntersection
+{
+  bool found;
+  float voxel;
+  int collisionDir;
+  int texAxis1;
+  int texAxis2;
 };
 
 bool TestCube(vec3 currentPos, vec3 dir, vec3 centerPos, vec3 size)
@@ -76,7 +85,7 @@ vec2 GetTextureCoordinate(vec2 voxelPlane, int x, int y)
 
 void RayCollision(Ray ray, float voxel, vec3 currentPos, float rayLengthTotal, int collisionDir, int axis1, int axis2, inout Ray rays[MAX_RAYS], inout int rayCount, inout vec4 color)
 {
-  if(ray.recursiveDepth < u_MaxRecursionDepth && rayCount < MAX_RAYS)
+  if(ray.recursiveDepth < u_MaxRecursionDepth && rayCount < MAX_RAYS && !ray.shadowRay)
   {
     vec3 normal = vec3(0,0,0);
     normal[collisionDir] = sign(ray.dir[collisionDir]);
@@ -85,10 +94,7 @@ void RayCollision(Ray ray, float voxel, vec3 currentPos, float rayLengthTotal, i
     rays[rayCount].dir = u_SunDir;
     rays[rayCount].rayLength = rayLengthTotal;
     rays[rayCount].recursiveDepth = ray.recursiveDepth + 1;
-    if(sig < 0)
-      rays[rayCount].energy = (1.0 - pow(clamp(dot(-normal, u_SunDir), 0.0, 1.0),0.4)) / 2 + 0.5;
-    else
-      rays[rayCount].energy = (1.0 - pow(clamp(dot(normal, u_SunDir), 0.0, 1.0),0.4)) / 2 + 0.5;
+    rays[rayCount].energy = (1.0 - pow(clamp(dot(sig*normal, u_SunDir), 0.0, 1.0),0.4)) / 2 + 0.5;
     rays[rayCount].shadowRay = true;
     rayCount++;
   }
@@ -119,6 +125,8 @@ void RayCollision(Ray ray, float voxel, vec3 currentPos, float rayLengthTotal, i
   }
 }
 
+const int value[3][3] = {{0,2,1}, {1,0,2}, {2,0,1}};
+
 vec4 RayCast(vec3 pos, vec3 dir)
 {
   Ray rays[MAX_RAYS];
@@ -147,6 +155,8 @@ vec4 RayCast(vec3 pos, vec3 dir)
 
     vec3 t = (nextPlane - rays[i].pos) / rays[i].dir;
 
+    RayIntersection intersection;
+    intersection.found = false;
     while(rayLengthTotal < u_MaxRayLength)
     {
       iterations++;
@@ -164,39 +174,25 @@ vec4 RayCast(vec3 pos, vec3 dir)
       rayLengthTotal += tMin;
       rayLength += tMin;
       currentPos = rays[i].pos + rayLength * rays[i].dir;
+      vec3 eq = vec3(equal(t, vec3(0,0,0)));
+      vec3 indices = eq * vec3(0,1,2);
+      float voxel = GetVoxel(currentPos + 0.5 * eq * stepDir);
+      int index = int(floor(indices.x + indices.y + indices.z));
 
-      if(t.x == 0)
+      if(eq.x + eq.y + eq.z != 0 && HasVoxel(voxel))
       {
-        float voxel = GetVoxel(currentPos + vec3(stepDir.x * 0.5,0,0));
-        if(HasVoxel(voxel))
-        {
-          RayCollision(rays[i], voxel, currentPos, rayLengthTotal, 0, 2, 1, rays, rayCount, color);
-          break;
-        }
-        t.x = (currentPos.x + stepDir.x - rays[i].pos.x) / rays[i].dir.x - rayLength;
+        intersection.voxel = voxel;
+        intersection.collisionDir = value[index][0];
+        intersection.texAxis1 = value[index][1];
+        intersection.texAxis2 = value[index][2];
+        intersection.found = true;
+        break;
       }
-      else if(t.y == 0)
-      {
-        float voxel = GetVoxel(currentPos + vec3(0, stepDir.y * 0.5,0));
-        if(HasVoxel(voxel))
-        {
-          RayCollision(rays[i], voxel, currentPos, rayLengthTotal, 1, 0, 2, rays, rayCount, color);
-          break;
-        }
-        t.y = (currentPos.y + stepDir.y - rays[i].pos.y) / rays[i].dir.y - rayLength;
-      }
-      else if(t.z == 0)
-      {
-        float voxel = GetVoxel(currentPos + vec3(0,0,stepDir.z * 0.5));
-        if(HasVoxel(voxel))
-        {
-          RayCollision(rays[i], voxel, currentPos, rayLengthTotal, 2, 0, 1, rays, rayCount, color);
-          break;
-        }
-        t.z = (currentPos.z + stepDir.z - rays[i].pos.z) / rays[i].dir.z - rayLength;
-      }
+      t[value[index][0]] = ((currentPos + stepDir - rays[i].pos) / rays[i].dir - rayLength)[value[index][0]];
     }
-    if(rayLengthTotal >= u_MaxRayLength && !rays[i].shadowRay)
+    if(intersection.found)
+      RayCollision(rays[i], intersection.voxel, currentPos, rayLengthTotal, intersection.collisionDir, intersection.texAxis1, intersection.texAxis2 , rays, rayCount, color);
+    else if(!rays[i].shadowRay)
       color = mix(vec4(texture(u_SkyboxUnit, rays[i].dir).xyz, 1.0), color, 1.0 - rays[i].energy);
   }
   /* if(iterations == 1) */

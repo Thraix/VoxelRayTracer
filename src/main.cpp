@@ -1,4 +1,5 @@
 #include <Greet.h>
+#include <thread>
 
 using namespace Greet;
 
@@ -130,6 +131,8 @@ class AppScene : public Scene
     AppScene()
       : cam{Mat4::ProjectionMatrix(RenderCommand::GetViewportAspect(), 90, 0.01,100.0f)}, camController{cam}
     {
+      cam.SetPosition({-3.45, 2.17, 3.53});
+      cam.SetRotation({-33.00, -48.00, 0.00});
       Vec2 screen[4] = {
         {-1.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, -1.0f}, {-1.0f, -1.0f}};
       uint indices[6] = {0, 2, 1, 0, 3, 2};
@@ -141,17 +144,15 @@ class AppScene : public Scene
       atlas->Disable();
 
       vao = VertexArray::Create();
-      vao->Enable();
-      vbo = VertexBuffer::CreateDynamic(screen, sizeof(screen));
+      vbo = VertexBuffer::CreateStatic(screen, sizeof(screen));
       vbo->SetStructure({{0, BufferAttributeType::VEC2}});
       vao->AddVertexBuffer(vbo);
       vbo->Disable();
 
       ibo = Buffer::Create(sizeof(indices), BufferType::INDEX, BufferDrawType::STATIC);
       ibo->UpdateData(indices);
-      ibo->Disable();
-
       vao->SetIndexBuffer(ibo);
+      ibo->Disable();
       vao->Disable();
       int size = 4;
       std::vector<float> data = Greet::Noise::GenNoise(size, size, size, 3, 4, 4, 4, 2, 0, 0, 0);
@@ -213,13 +214,30 @@ class AppScene : public Scene
       GLuint64 result;
       glGetQueryObjectui64v(1, GL_QUERY_RESULT, &result);
       float ms = result * 1e-6;
+      if(ms > 1000)
+        abort();
       fps = 1000 / ms;
     }
 
     virtual void Update(float timeElapsed) override
     {
-      timer += timeElapsed; 
+      timer += timeElapsed;
       camController.Update(timeElapsed);
+    }
+
+    void OnEvent(Event& event) override
+    {
+      Scene::OnEvent(event);
+      if(EVENT_IS_TYPE(event, EventType::KEY_PRESS))
+      {
+        KeyPressEvent& e = static_cast<KeyPressEvent&>(event);
+        if(e.GetButton() == GREET_KEY_C)
+        {
+          cam.SetPosition({-3.45, 2.17, 3.53});
+          cam.SetRotation({-33.00, -48.00, 0.00});
+        }
+      }
+
     }
 
     void ViewportResize(ViewportResizeEvent& event) override
