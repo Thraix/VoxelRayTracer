@@ -127,6 +127,7 @@ class AppScene : public Scene
     Cam cam;
     CamController camController;
     Ref<Atlas> atlas;
+    uint size;
 
     AppScene()
       : cam{Mat4::ProjectionMatrix(RenderCommand::GetViewportAspect(), 90, 0.01,100.0f)}, camController{cam}
@@ -154,20 +155,12 @@ class AppScene : public Scene
       vao->SetIndexBuffer(ibo);
       ibo->Disable();
       vao->Disable();
-      int size = 4;
+      size = 4;
       std::vector<float> data = Greet::Noise::GenNoise(size, size, size, 3, 4, 4, 4, 2, 0, 0, 0);
       /* static std::vector<float> GenNoise(uint width, uint height, uint length,
        * uint octave, uint stepX, uint stepY, uint stepZ, float persistance, int
        * offsetX, int offsetY, int offsetZ); */
       shader = Shader::FromFile("res/shaders/voxel.glsl");
-      shader->Enable();
-      shader->SetUniform1i("u_Size", size);
-      shader->SetUniform1i("u_AtlasSize", atlas->GetAtlasSize());
-      shader->SetUniform1i("u_AtlasTextureSize", atlas->GetTextureSize());
-      shader->SetUniform1i("u_TextureUnit", 0);
-      shader->SetUniform1i("u_ChunkTexUnit", 1);
-      shader->SetUniform1i("u_SkyboxUnit", 2);
-      shader->Disable();
       uint tex;
       GLCall(glGenTextures(1, &tex));
       int i = 0;
@@ -178,7 +171,12 @@ class AppScene : public Scene
           for(int x = 0;x<size;x++)
           {
             if(y < size-2 || (y == size-1 && x == 1 && z == 1) || (y == size-2 && x == 2 && z == 2))
+            {
+              if(y < size-2)
               data[x + y * size + z * size * size] = 0.7;
+              else
+              data[x + y * size + z * size * size] = 0.64;
+            }
             else
               data[x + y * size + z * size * size] = 0.4;
           }
@@ -202,6 +200,12 @@ class AppScene : public Scene
       shader->Enable();
       shader->SetUniformMat4("u_PVInvMatrix", cam.GetInvPVMatrix());
       shader->SetUniformMat4("u_ViewMatrix", cam.GetViewMatrix());
+      shader->SetUniform1i("u_Size", size);
+      shader->SetUniform1i("u_AtlasSize", atlas->GetAtlasSize());
+      shader->SetUniform1i("u_AtlasTextureSize", atlas->GetTextureSize());
+      shader->SetUniform1i("u_TextureUnit", 0);
+      shader->SetUniform1i("u_ChunkTexUnit", 1);
+      shader->SetUniform1i("u_SkyboxUnit", 2);
       Vec2 dir = Vec2{1,0};
       dir.RotateR(timer);
       shader->SetUniform3f("u_SunDir", Vec3<float>{dir.x, 1, dir.y}.Normalize());

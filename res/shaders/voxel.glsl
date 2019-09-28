@@ -18,7 +18,7 @@ uniform int u_AtlasSize;
 uniform int u_AtlasTextureSize;
 uniform vec3 u_SunDir;
 
-const int MAX_RAYS = 2;
+const int MAX_RAYS = 4;
 
 bool HasVoxel(float value)
 {
@@ -73,7 +73,7 @@ float CalcEnergy(Ray ray, float block)
   if(block < 0.65)
     return pow(ray.energy * 0.8, 2);//pow((ray.energy * 2/4),2);
   else
-    return 0;//pow((ray.energy * 1/4),2);
+    return 0;//pow((ray.energy * 2/4),2);
 }
 
 vec2 GetTextureCoordinate(vec2 voxelPlane, int x, int y)
@@ -98,18 +98,18 @@ void RayCollision(Ray ray, float voxel, vec3 currentPos, float rayLengthTotal, i
     rays[rayCount].shadowRay = true;
     rayCount++;
   }
-  /* if(ray.recursiveDepth < u_MaxRecursionDepth && rayCount < MAX_RAYS) */
-  /* { */
-  /*   rays[rayCount].pos = currentPos; */
-  /*   rays[rayCount].dir = ray.dir; */
-  /*   rays[rayCount].dir[collisionDir] = -ray.dir[collisionDir]; */
-  /*   rays[rayCount].rayLength = rayLengthTotal; */
-  /*   rays[rayCount].recursiveDepth = ray.recursiveDepth + 1; */
-  /*   rays[rayCount].energy = CalcEnergy(ray, voxel); */
-  /*   rays[rayCount].shadowRay = false; */
-  /*   if(rays[rayCount].energy > 0.1) */
-  /*     rayCount++; */
-  /* } */
+  if(ray.recursiveDepth < u_MaxRecursionDepth && rayCount < MAX_RAYS && !ray.shadowRay)
+  {
+    rays[rayCount].pos = currentPos;
+    rays[rayCount].dir = ray.dir;
+    rays[rayCount].dir[collisionDir] = -ray.dir[collisionDir];
+    rays[rayCount].rayLength = rayLengthTotal;
+    rays[rayCount].recursiveDepth = ray.recursiveDepth + 1;
+    rays[rayCount].energy = CalcEnergy(ray, voxel);
+    rays[rayCount].shadowRay = false;
+    if(rays[rayCount].energy > 0.1)
+      rayCount++;
+  }
   if(ray.shadowRay)
   {
     color.xyz *= ray.energy;
