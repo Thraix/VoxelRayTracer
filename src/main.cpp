@@ -156,7 +156,7 @@ class AppScene : public Scene
       ibo->Disable();
       vao->Disable();
       size = 4;
-      std::vector<float> data = Greet::Noise::GenNoise(size, size, size, 3, 4, 4, 4, 2, 0, 0, 0);
+      //std::vector<float> data = Greet::Noise::GenNoise(size, size, size, 3, 4, 4, 4, 2, 0, 0, 0);
       /* static std::vector<float> GenNoise(uint width, uint height, uint length,
        * uint octave, uint stepX, uint stepY, uint stepZ, float persistance, int
        * offsetX, int offsetY, int offsetZ); */
@@ -164,6 +164,7 @@ class AppScene : public Scene
       uint tex;
       GLCall(glGenTextures(1, &tex));
       int i = 0;
+      std::vector<byte> data(size * size * size);
       for(int z = 0;z<size;z++)
       {
         for(int y = 0;y<size;y++)
@@ -173,19 +174,19 @@ class AppScene : public Scene
             if(y < size-2 || (y == size-1 && x == 1 && z == 1) || (y == size-2 && x == 2 && z == 2))
             {
               if(y < size-2)
-              data[x + y * size + z * size * size] = 0.7;
+              data[x + y * size + z * size * size] = 1;
               else
-              data[x + y * size + z * size * size] = 0.64;
+              data[x + y * size + z * size * size] = 2;
             }
             else
-              data[x + y * size + z * size * size] = 0.4;
+              data[x + y * size + z * size * size] = 0;
           }
         }
       }
       glBindTexture(GL_TEXTURE_3D, tex);
       GLCall(glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
       GLCall(glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
-      GLCall(glTexImage3D(GL_TEXTURE_3D, 0, GL_RED, size, size, size, 0, GL_RED, GL_FLOAT, data.data()));
+      GLCall(glTexImage3D(GL_TEXTURE_3D, 0, GL_RED, size, size, size, 0, GL_RED, GL_UNSIGNED_BYTE, data.data()));
       texture3D.reset(new uint{tex});
     }
     inline static int fps = 0;
