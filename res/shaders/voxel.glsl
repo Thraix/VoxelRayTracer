@@ -180,6 +180,15 @@ Ray GetReflectionRay(Ray ray, RayIntersection intersection)
   return reflectionRay;
 }
 
+vec3 GetSkyboxColor(Ray ray, vec3 color)
+{
+  vec3 unitDir = normalize(ray.dir);
+  float sun = 10 * pow(dot(normalize(u_SunDir), unitDir), 400.0);
+  float grad = (unitDir.y + 1.0) * 0.5;
+  vec3 skyboxColor = max(vec3(0,grad*0.75,grad), vec3(sun, sun, 0));
+  return mix(skyboxColor, color, 1.0 - ray.energy);
+}
+
 void main()
 {
   vec3 color = vec3(0,0,0);
@@ -208,13 +217,13 @@ void main()
       }
       else
       {
-        color = mix(texture(u_SkyboxUnit, reflectionRay.dir).xyz, color, 1.0 - reflectionRay.energy);
+        color = GetSkyboxColor(reflectionRay, color);
       }
     }
   }
   else
   {
-    color = texture(u_SkyboxUnit, ray.dir).xyz;
+    color = GetSkyboxColor(ray, color);
   }
 
   f_Color = vec4(color, 1.0);
