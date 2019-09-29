@@ -171,16 +171,23 @@ class AppScene : public Scene
         {
           for(int x = 0;x<size;x++)
           {
-            if(y < size-2 || (y == size-1 && x == 1 && z == 1) || (y == size-2 && x == 2 && z == 2))
+            if(y < size-2 || (y == size-1 && x == 0 && z == 0) || (y == size-2 && x == 1 && z == 1))
             {
               if(y < size-2)
-              data[x + y * size + z * size * size] = 1;
+                data[x + y * size + z * size * size] = 1;
               else
-              data[x + y * size + z * size * size] = 2;
+                data[x + y * size + z * size * size] = 2;
             }
             else
               data[x + y * size + z * size * size] = 0;
           }
+        }
+      }
+      for(int z = 0;z<size;z++)
+      {
+        for(int y = size-2;y<size;y++)
+        {
+          data[size-1 + y * size + z * size * size] = 2;
         }
       }
       glBindTexture(GL_TEXTURE_3D, tex);
