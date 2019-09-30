@@ -25,8 +25,6 @@ struct Ray
   vec3 dir;
   float rayLength;
   float energy;
-  float recursiveDepth;
-  bool shadowRay;
 };
 
 struct RayIntersection
@@ -44,6 +42,7 @@ struct Material
 {
   float reflectivity;
   float refractivity;
+  bool transparent;
   int texX;
   int texY;
 };
@@ -52,9 +51,9 @@ struct Material
 // but for some reason this causes huge performance decreases.
 // I'm talking up to 10 seconds per frame. For unknown reasons.
 uniform Material materials[c_Materials] = {
-  Material(0,1,0,0), // Air
-  Material(0,1,0,0), // Stone
-  Material(0.6,1.5,0,1) // Glass
+  Material(0,1,true,0,0), // Air
+  Material(0,1,false,0,0), // Stone
+  Material(0.6,1.5,true,0,1) // Glass
 };
 
 const int intersectionAxis[3][3] = {{0,2,1}, {1,0,2}, {2,0,1}};
@@ -109,7 +108,7 @@ vec3 RayColor(Ray ray, RayIntersection intersection, vec3 color)
 RayIntersection RayMarch(Ray ray)
 {
   float iterations = 0;
-  float rayLength = 0;
+  float rayLength = ray.rayLength;
   vec3 currentPos = ray.pos;
   vec3 nextPlane = vec3(
       ray.dir.x < 0 ? ceil(currentPos.x-1) : floor(currentPos.x+1),
@@ -138,6 +137,26 @@ RayIntersection RayMarch(Ray ray)
 
     if(HasVoxel(voxel))
     {
+      Material material = GetMaterial(voxel);
+      if(material.transparent)
+      {
+        vec2 texCoord = GetTextureCoordinate(
+            vec2(
+              currentPos[intersectionAxis[index][1]],
+              currentPos[intersectionAxis[index][2]]),
+            material.texX,material.texY);
+        if(texture(u_TextureUnit, texCoord).a == 0)
+        {
+          /* vec3 normal = ray.dir; */
+          /* normal[intersectionAxis[index][0]] = -ray.dir[intersectionAxis[index][0]]; */
+          /* ray.rayLength = 0; */
+          /* ray.pos = currentPos; */
+          /* ray.dir = refract(ray.dir, normalize(normal), 1 / material.refractivity); */
+          /* rayLength = 0; */
+          t[intersectionAxis[index][0]] = ((currentPos + stepDir - ray.pos) / ray.dir - rayLength)[intersectionAxis[index][0]];
+          continue;
+        }
+      }
       return RayIntersection(
           voxel,
           currentPos,
@@ -161,9 +180,7 @@ Ray GetShadowRay(Ray ray, RayIntersection intersection)
   shadowRay.pos = intersection.collisionPoint - u_SunDir * 0.0001 * sig;
   shadowRay.dir = u_SunDir;
   shadowRay.rayLength = intersection.rayLength;
-  shadowRay.recursiveDepth = ray.recursiveDepth + 1;
   shadowRay.energy = (1.0 - pow(clamp(dot(sig*normal, u_SunDir), 0.0, 1.0),0.4)) / 2 + 0.5;
-  shadowRay.shadowRay = true;
   return shadowRay;
 }
 
@@ -176,7 +193,6 @@ Ray GetReflectionRay(Ray ray, RayIntersection intersection)
   reflectionRay.dir[intersection.collisionDir] = -ray.dir[intersection.collisionDir];
   reflectionRay.rayLength = intersection.rayLength;
   reflectionRay.energy = material.reflectivity * ray.energy;
-  reflectionRay.shadowRay = false;
   return reflectionRay;
 }
 
@@ -192,7 +208,7 @@ vec3 GetSkyboxColor(Ray ray, vec3 color)
 void main()
 {
   vec3 color = vec3(0,0,0);
-  Ray ray = Ray(v_Near + vec3(u_Size*0.5), v_Dir, 0, 1, 1, false);
+  Ray ray = Ray(v_Near + vec3(u_Size*0.5), v_Dir, 0, 1);
   RayIntersection intersection = RayMarch(ray);
   if(intersection.found)
   {
