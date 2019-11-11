@@ -155,7 +155,7 @@ class AppScene : public Scene
       vao->SetIndexBuffer(ibo);
       ibo->Disable();
       vao->Disable();
-      size = 4;
+      size = 8;
       //std::vector<float> data = Greet::Noise::GenNoise(size, size, size, 3, 4, 4, 4, 2, 0, 0, 0);
       /* static std::vector<float> GenNoise(uint width, uint height, uint length,
        * uint octave, uint stepX, uint stepY, uint stepZ, float persistance, int
@@ -280,7 +280,7 @@ class Application : public App
 
     void InitGUI()
     {
-      GUIScene* scene = new GUIScene(new GUIRenderer(), Shader::FromFile("res/shaders/gui.shader"));
+      GUIScene* scene = new GUIScene(new GUIRenderer());
       scene->AddFrame(FrameFactory::GetFrame("res/guis/header.xml"));
 
       if (auto frame = scene->GetFrame("FrameHeader"))
