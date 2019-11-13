@@ -26,6 +26,7 @@ struct Ray
   float rayLength;
   float energy;
   float voxel;
+  bool shadow;
 };
 
 struct RayIntersection
@@ -54,7 +55,7 @@ struct Material
 uniform Material materials[c_Materials] = {
   Material(0,1,true,0,0), // Air
   Material(0,1,false,0,0), // Stone
-  Material(0.6,2.5,true,0,1) // Glass
+  Material(0.6,1.5,true,0,1) // Glass
 };
 
 const int intersectionAxis[3][3] = {{0,2,1}, {1,0,2}, {2,0,1}};
@@ -83,11 +84,12 @@ Ray GetShadowRay(Ray ray, RayIntersection intersection)
   vec3 normal = vec3(0,0,0);
   normal[intersection.collisionDir] = sign(ray.dir[intersection.collisionDir]);
   float sig = sign(normal[intersection.collisionDir]) * sign(u_SunDir[intersection.collisionDir]);
-  shadowRay.voxel = 0.0;
+  shadowRay.voxel = intersection.voxel;
   shadowRay.pos = intersection.collisionPoint - u_SunDir * 0.0001 * sig;
   shadowRay.dir = u_SunDir;
   shadowRay.rayLength = intersection.rayLength;
   shadowRay.energy = (1.0 - pow(clamp(dot(sig*normal, u_SunDir), 0.0, 1.0),0.4)) / 2 + 0.5;
+  shadowRay.shadow = true;
   return shadowRay;
 }
 
@@ -101,6 +103,7 @@ Ray GetReflectionRay(Ray ray, RayIntersection intersection)
   reflectionRay.dir[intersection.collisionDir] = -ray.dir[intersection.collisionDir];
   reflectionRay.rayLength = intersection.rayLength;
   reflectionRay.energy = material.reflectivity * ray.energy;
+  reflectionRay.shadow = false;
   return reflectionRay;
 }
 
@@ -124,6 +127,7 @@ Ray GetRefractionRay(Ray ray, RayIntersection intersection)
   }
   refractionRay.rayLength = intersection.rayLength;
   refractionRay.energy = ray.energy;
+  refractionRay.shadow = false;
   return refractionRay;
 }
 
@@ -185,7 +189,32 @@ RayIntersection RayMarch(inout Ray ray)
     float voxel = GetVoxel(currentPos + 0.5 * eq * stepDir);
     int index = int(floor(indices.x + indices.y + indices.z));
 
-    if((HasVoxel(voxel) && voxel != rayVoxel) || (rayVoxel != 0 && voxel == 0))
+    if(ray.shadow)
+    {
+      if(HasVoxel(voxel))
+      {
+        RayIntersection intersection =
+          RayIntersection(
+              voxel,
+              currentPos,
+              rayLength,
+              intersectionAxis[index][0],
+              intersectionAxis[index][1],
+              intersectionAxis[index][2], true);
+
+        Material mat = GetMaterial(voxel);
+        vec2 texCoord = GetTextureCoordinate(
+            vec2(
+              intersection.collisionPoint[intersection.texAxis1],
+              intersection.collisionPoint[intersection.texAxis2]),
+            mat.texX,mat.texY);
+        if(!mat.transparent || texture(u_TextureUnit, texCoord).a == 1)
+        {
+          return intersection;
+        }
+      }
+    }
+    else if((HasVoxel(voxel) && voxel != rayVoxel) || (rayVoxel != 0 && voxel == 0))
     {
       RayIntersection intersection =
         RayIntersection(
@@ -277,7 +306,7 @@ void TransparentRay(Ray ray, RayIntersection intersection, inout vec3 color)
 void main()
 {
   vec3 color = vec3(0,0,0);
-  Ray ray = Ray(v_Near + vec3(u_Size*0.5), v_Dir, 0, 1, 0.0);
+  Ray ray = Ray(v_Near + vec3(u_Size*0.5), v_Dir, 0, 1, 0.0, false);
   RayIntersection intersection = SingleRay(ray, color);
   if(intersection.found)
   {
