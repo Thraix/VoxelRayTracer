@@ -142,6 +142,7 @@ class AppScene : public Scene
       atlas->AddTexture("stone", "res/textures/stone.png");
       atlas->AddTexture("dirt", "res/textures/dirt.png");
       atlas->AddTexture("glass", "res/textures/glass.png");
+      atlas->AddTexture("grass", "res/textures/grass.png");
       atlas->Disable();
 
       vao = VertexArray::Create();
@@ -155,41 +156,62 @@ class AppScene : public Scene
       vao->SetIndexBuffer(ibo);
       ibo->Disable();
       vao->Disable();
-      size = 8;
+      size = 16;
       //std::vector<float> data = Greet::Noise::GenNoise(size, size, size, 3, 4, 4, 4, 2, 0, 0, 0);
       /* static std::vector<float> GenNoise(uint width, uint height, uint length,
        * uint octave, uint stepX, uint stepY, uint stepZ, float persistance, int
        * offsetX, int offsetY, int offsetZ); */
+      std::vector<float> noise = Greet::Noise::GenNoise(size, size, 5, 10, 10, 0.5, 0, 0);
       shader = Shader::FromFile("res/shaders/voxel.glsl");
       uint tex;
       GLCall(glGenTextures(1, &tex));
-      int i = 0;
       std::vector<byte> data(size * size * size);
-      for(int z = 0;z<size;z++)
+      int i = 0;
+      for(int z = 0; z < size; z++)
       {
-        for(int y = 0;y<size;y++)
+        for(int x = 0; x < size; x++)
         {
-          for(int x = 0;x<size;x++)
+          for(int y = 0; y < noise[x + z * size] * size; y++)
           {
-            if(y < size-2 || (y == size-1 && x == 0 && z == 0) || (y == size-2 && x == 1 && z == 1))
-            {
-              if(y < size-2)
-                data[x + y * size + z * size * size] = 1;
-              else
-                data[x + y * size + z * size * size] = 2;
-            }
-            else
-              data[x + y * size + z * size * size] = 0;
+            data[x + y * size + z * size * size] = 1;
           }
+          int grassLevel = noise[x + z * size] * size;
+          data[x + grassLevel * size + z * size * size] = 3;
         }
       }
-      for(int z = 0;z<size;z++)
+      for(int z = 2; z < size-2; z++)
       {
-        for(int y = size-2;y<size;y++)
-        {
-          data[size-1 + y * size + z * size * size] = 2;
-        }
+          for(int y = noise[z * size] * size+1; y < size; y++)
+          {
+          data[y * size + z * size * size] = 2;
+          }
       }
+      /* std::vector<byte> data(size * size * size); */
+      /* for(int z = 0;z<size;z++) */
+      /* { */
+      /*   for(int y = 0;y<size;y++) */
+      /*   { */
+      /*     for(int x = 0;x<size;x++) */
+      /*     { */
+      /*       if(y < size-2 || (y == size-1 && x == 0 && z == 0) || (y == size-2 && x == 1 && z == 1)) */
+      /*       { */
+      /*         if(y < size-2) */
+      /*           data[x + y * size + z * size * size] = 1; */
+      /*         else */
+      /*           data[x + y * size + z * size * size] = 2; */
+      /*       } */
+      /*       else */
+      /*         data[x + y * size + z * size * size] = 0; */
+      /*     } */
+      /*   } */
+      /* } */
+      /* for(int z = 0;z<size;z++) */
+      /* { */
+      /*   for(int y = size-2;y<size;y++) */
+      /*   { */
+      /*     data[size-1 + y * size + z * size * size] = 2; */
+      /*   } */
+      /* } */
       glBindTexture(GL_TEXTURE_3D, tex);
       GLCall(glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
       GLCall(glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));

@@ -17,7 +17,7 @@ uniform int u_AtlasSize;
 uniform int u_AtlasTextureSize;
 uniform vec3 u_SunDir;
 
-const int c_Materials = 3;
+const int c_Materials = 4;
 
 struct Ray
 {
@@ -55,7 +55,8 @@ struct Material
 uniform Material materials[c_Materials] = {
   Material(0,1,true,0,0), // Air
   Material(0,1,false,0,0), // Stone
-  Material(0.6,1.5,true,0,1) // Glass
+  Material(0.6,1.5,true,0,1), // Glass
+  Material(0,1,false,1,1) // Grass 
 };
 
 const int intersectionAxis[3][3] = {{0,2,1}, {1,0,2}, {2,0,1}};
@@ -208,7 +209,7 @@ RayIntersection RayMarch(inout Ray ray)
               intersection.collisionPoint[intersection.texAxis1],
               intersection.collisionPoint[intersection.texAxis2]),
             mat.texX,mat.texY);
-        if(!mat.transparent || texture(u_TextureUnit, texCoord).a == 1)
+        if(!mat.transparent && texture(u_TextureUnit, texCoord).a == 1)
         {
           return intersection;
         }
