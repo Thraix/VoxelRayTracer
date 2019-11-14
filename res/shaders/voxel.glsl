@@ -49,17 +49,14 @@ struct Material
   int texY;
 };
 
-// I really want this to be const instead of uniform,
-// but for some reason this causes huge performance decreases.
-// I'm talking up to 10 seconds per frame. For unknown reasons.
-uniform Material materials[c_Materials] = {
+Material materials[c_Materials] = {
   Material(0,1,true,0,0), // Air
   Material(0,1,false,0,0), // Stone
   Material(0.6,1.5,true,0,1), // Glass
   Material(0,1,false,1,1) // Grass
 };
 
-const int intersectionAxis[3][3] = {{0,2,1}, {1,0,2}, {2,0,1}};
+int intersectionAxis[3][3] = {{0,2,1}, {1,0,2}, {2,0,1}};
 
 bool HasVoxel(float value)
 {
@@ -121,6 +118,8 @@ Ray GetRefractionRay(Ray ray, RayIntersection intersection)
   refractionRay.voxel = intersection.voxel;
   refractionRay.pos = intersection.collisionPoint;
   refractionRay.dir = refract(normalize(ray.dir), normal,  outRefractivity / inRefractivity);
+
+  // Total Internal Reflection
   if(refractionRay.dir == vec3(0))
   {
     refractionRay = GetReflectionRay(ray, intersection);
@@ -150,15 +149,20 @@ vec2 GetTextureCoordinate(vec2 voxelPlane, int x, int y)
   return vec2(texCoord.x, 1.0f - texCoord.y);
 }
 
-vec3 RayColor(Ray ray, RayIntersection intersection, vec3 color)
+vec4 GetColor(RayIntersection intersection)
 {
-  Material material = GetMaterial(intersection.voxel);
+  Material mat = GetMaterial(intersection.voxel);
   vec2 texCoord = GetTextureCoordinate(
       vec2(
         intersection.collisionPoint[intersection.texAxis1],
         intersection.collisionPoint[intersection.texAxis2]),
-      material.texX,material.texY);
-  return mix(texture(u_TextureUnit, texCoord).xyz, color, 1.0 - ray.energy);
+      mat.texX,mat.texY);
+  return texture(u_TextureUnit, texCoord);
+}
+
+vec3 RayColor(Ray ray, RayIntersection intersection, vec3 color)
+{
+  return mix(GetColor(intersection).xyz, color, 1.0 - ray.energy);
 }
 
 RayIntersection RayMarchShadow(inout Ray ray)
@@ -202,12 +206,7 @@ RayIntersection RayMarchShadow(inout Ray ray)
             intersectionAxis[index][2], true);
 
       Material mat = GetMaterial(voxel);
-      vec2 texCoord = GetTextureCoordinate(
-          vec2(
-            intersection.collisionPoint[intersection.texAxis1],
-            intersection.collisionPoint[intersection.texAxis2]),
-          mat.texX,mat.texY);
-      if(!mat.transparent && texture(u_TextureUnit, texCoord).a == 1)
+      if(!mat.transparent && GetColor(intersection).a == 1)
       {
         return intersection;
       }
@@ -231,6 +230,7 @@ RayIntersection RayMarch(inout Ray ray)
   float rayVoxel = ray.voxel;
 
   vec3 t = (nextPlane - ray.pos) / ray.dir;
+  int internalReflection = 0;
 
   while(rayLength < u_MaxRayLength)
   {
@@ -263,7 +263,17 @@ RayIntersection RayMarch(inout Ray ray)
     else if(rayVoxel != 0 && voxel == 0)
     {
       // Inside transparent voxel
+      vec3 oldDir = ray.dir;
       ray = GetRefractionRay(ray, intersection);
+      if(ray.voxel == rayVoxel)
+      {
+        internalReflection++;
+        if(internalReflection > 10)
+        {
+          ray.dir = oldDir;
+          ray.voxel = 0;
+        }
+      }
       rayVoxel = ray.voxel;
 
       vec3 nextPlane = vec3(
@@ -314,18 +324,15 @@ void TransparentRay(Ray ray, RayIntersection intersection, inout vec3 color)
 {
   Material mat = GetMaterial(intersection.voxel);
 
-  while(intersection.found && mat.transparent)
+  int count = 0;
+  while(intersection.found && mat.transparent && count < 10)
   {
-    vec2 texCoord = GetTextureCoordinate(
-        vec2(
-          intersection.collisionPoint[intersection.texAxis1],
-          intersection.collisionPoint[intersection.texAxis2]),
-        mat.texX,mat.texY);
-    if(texture(u_TextureUnit, texCoord).a != 1)
+    if(GetColor(intersection).a != 1)
     {
       ray = GetRefractionRay(ray, intersection);
       intersection = SingleRay(ray, color);
       mat = GetMaterial(intersection.voxel);
+      count++;
     }
     else
     {

@@ -186,6 +186,13 @@ class AppScene : public Scene
           data[y * size + z * size * size] = 2;
           }
       }
+      for(int z = 2; z < size-2; z++)
+      {
+          for(int y = noise[size - 4 + z * size] * size+1; y < size-4; y++)
+          {
+            data[size - 4 + y * size + z * size * size] = 2;
+          }
+      }
       /* std::vector<byte> data(size * size * size); */
       /* for(int z = 0;z<size;z++) */
       /* { */
