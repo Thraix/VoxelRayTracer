@@ -11,7 +11,7 @@ uniform sampler2D u_TextureUnit;
 uniform sampler3D u_ChunkTexUnit;
 uniform samplerCube u_SkyboxUnit;
 
-uniform float u_MaxRayLength = 200;
+uniform float u_MaxRayLength = 100;
 uniform int u_Size;
 uniform int u_AtlasSize;
 uniform int u_AtlasTextureSize;
@@ -56,7 +56,7 @@ uniform Material materials[c_Materials] = {
   Material(0,1,true,0,0), // Air
   Material(0,1,false,0,0), // Stone
   Material(0.6,1.5,true,0,1), // Glass
-  Material(0,1,false,1,1) // Grass 
+  Material(0,1,false,1,1) // Grass
 };
 
 const int intersectionAxis[3][3] = {{0,2,1}, {1,0,2}, {2,0,1}};
@@ -87,7 +87,7 @@ Ray GetShadowRay(Ray ray, RayIntersection intersection)
   float sig = sign(normal[intersection.collisionDir]) * sign(u_SunDir[intersection.collisionDir]);
   shadowRay.voxel = intersection.voxel;
   shadowRay.pos = intersection.collisionPoint - u_SunDir * 0.0001 * sig;
-  shadowRay.dir = u_SunDir;
+  shadowRay.dir = normalize(u_SunDir);
   shadowRay.rayLength = intersection.rayLength;
   shadowRay.energy = (1.0 - pow(clamp(dot(sig*normal, u_SunDir), 0.0, 1.0),0.4)) / 2 + 0.5;
   shadowRay.shadow = true;
@@ -161,7 +161,7 @@ vec3 RayColor(Ray ray, RayIntersection intersection, vec3 color)
   return mix(texture(u_TextureUnit, texCoord).xyz, color, 1.0 - ray.energy);
 }
 
-RayIntersection RayMarch(inout Ray ray)
+RayIntersection RayMarchShadow(inout Ray ray)
 {
   float rayLength = ray.rayLength;
   vec3 currentPos = ray.pos;
@@ -190,32 +190,7 @@ RayIntersection RayMarch(inout Ray ray)
     float voxel = GetVoxel(currentPos + 0.5 * eq * stepDir);
     int index = int(floor(indices.x + indices.y + indices.z));
 
-    if(ray.shadow)
-    {
-      if(HasVoxel(voxel))
-      {
-        RayIntersection intersection =
-          RayIntersection(
-              voxel,
-              currentPos,
-              rayLength,
-              intersectionAxis[index][0],
-              intersectionAxis[index][1],
-              intersectionAxis[index][2], true);
-
-        Material mat = GetMaterial(voxel);
-        vec2 texCoord = GetTextureCoordinate(
-            vec2(
-              intersection.collisionPoint[intersection.texAxis1],
-              intersection.collisionPoint[intersection.texAxis2]),
-            mat.texX,mat.texY);
-        if(!mat.transparent && texture(u_TextureUnit, texCoord).a == 1)
-        {
-          return intersection;
-        }
-      }
-    }
-    else if((HasVoxel(voxel) && voxel != rayVoxel) || (rayVoxel != 0 && voxel == 0))
+    if(HasVoxel(voxel))
     {
       RayIntersection intersection =
         RayIntersection(
@@ -226,10 +201,68 @@ RayIntersection RayMarch(inout Ray ray)
             intersectionAxis[index][1],
             intersectionAxis[index][2], true);
 
-      if(HasVoxel(voxel))
+      Material mat = GetMaterial(voxel);
+      vec2 texCoord = GetTextureCoordinate(
+          vec2(
+            intersection.collisionPoint[intersection.texAxis1],
+            intersection.collisionPoint[intersection.texAxis2]),
+          mat.texX,mat.texY);
+      if(!mat.transparent && texture(u_TextureUnit, texCoord).a == 1)
       {
         return intersection;
       }
+    }
+    t[intersectionAxis[index][0]] = ((currentPos + stepDir - ray.pos) / ray.dir - (rayLength - ray.rayLength))[intersectionAxis[index][0]];
+
+  }
+  return RayIntersection(0, vec3(0,0,0), 0, 0, 1, 2, false);
+}
+
+RayIntersection RayMarch(inout Ray ray)
+{
+  float rayLength = ray.rayLength;
+  vec3 currentPos = ray.pos;
+  vec3 nextPlane = vec3(
+      ray.dir.x < 0 ? ceil(currentPos.x-1) : floor(currentPos.x+1),
+      ray.dir.y < 0 ? ceil(currentPos.y-1) : floor(currentPos.y+1),
+      ray.dir.z < 0 ? ceil(currentPos.z-1) : floor(currentPos.z+1));
+
+  vec3 stepDir = sign(ray.dir);
+  float rayVoxel = ray.voxel;
+
+  vec3 t = (nextPlane - ray.pos) / ray.dir;
+
+  while(rayLength < u_MaxRayLength)
+  {
+    if(!TestCube(currentPos, ray.dir, vec3(u_Size*0.5), vec3(u_Size)))
+    {
+      return RayIntersection(0, vec3(0,0,0), 0, 0, 1, 2, false);
+    }
+    float tMin = min(t.x, min(t.y, t.z));
+    t -= tMin;
+    rayLength += tMin;
+    vec3 oldPos = currentPos;
+    currentPos = ray.pos + (rayLength - ray.rayLength) * ray.dir;
+    vec3 eq = vec3(equal(t, vec3(0,0,0)));
+    vec3 indices = eq * vec3(0,1,2);
+    float voxel = GetVoxel(currentPos + 0.5 * eq * stepDir);
+    int index = int(floor(indices.x + indices.y + indices.z));
+    RayIntersection intersection =
+      RayIntersection(
+          voxel,
+          currentPos,
+          rayLength,
+          intersectionAxis[index][0],
+          intersectionAxis[index][1],
+          intersectionAxis[index][2], true);
+
+    if(HasVoxel(voxel) && voxel != rayVoxel)
+    {
+      return intersection;
+    }
+    else if(rayVoxel != 0 && voxel == 0)
+    {
+      // Inside transparent voxel
       ray = GetRefractionRay(ray, intersection);
       rayVoxel = ray.voxel;
 
@@ -241,7 +274,6 @@ RayIntersection RayMarch(inout Ray ray)
       stepDir = sign(ray.dir);
     }
     t[intersectionAxis[index][0]] = ((currentPos + stepDir - ray.pos) / ray.dir - (rayLength - ray.rayLength))[intersectionAxis[index][0]];
-
   }
   return RayIntersection(0, vec3(0,0,0), 0, 0, 1, 2, false);
 }
@@ -265,7 +297,7 @@ RayIntersection SingleRay(Ray ray, inout vec3 color)
       color = RayColor(ray, intersection, color);
       // Shadow ray
       Ray shadowRay = GetShadowRay(ray, intersection);
-      RayIntersection shadowIntersection = RayMarch(shadowRay);
+      RayIntersection shadowIntersection = RayMarchShadow(shadowRay);
       if(shadowIntersection.found)
         color *= shadowRay.energy; // Energy for shadows is how much it shouldn't shade
     }
@@ -282,7 +314,7 @@ void TransparentRay(Ray ray, RayIntersection intersection, inout vec3 color)
 {
   Material mat = GetMaterial(intersection.voxel);
 
-  while(mat.transparent)
+  while(intersection.found && mat.transparent)
   {
     vec2 texCoord = GetTextureCoordinate(
         vec2(
@@ -293,8 +325,6 @@ void TransparentRay(Ray ray, RayIntersection intersection, inout vec3 color)
     {
       ray = GetRefractionRay(ray, intersection);
       intersection = SingleRay(ray, color);
-      if(!intersection.found)
-        break;
       mat = GetMaterial(intersection.voxel);
     }
     else
@@ -307,7 +337,7 @@ void TransparentRay(Ray ray, RayIntersection intersection, inout vec3 color)
 void main()
 {
   vec3 color = vec3(0,0,0);
-  Ray ray = Ray(v_Near + vec3(u_Size*0.5), v_Dir, 0, 1, 0.0, false);
+  Ray ray = Ray(v_Near + vec3(u_Size*0.5), normalize(v_Dir), 0, 1, 0.0, false);
   RayIntersection intersection = SingleRay(ray, color);
   if(intersection.found)
   {
