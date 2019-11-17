@@ -86,7 +86,7 @@ Ray GetShadowRay(Ray ray, RayIntersection intersection)
   shadowRay.pos = intersection.collisionPoint - u_SunDir * 0.0001 * sig;
   shadowRay.dir = normalize(u_SunDir);
   shadowRay.rayLength = intersection.rayLength;
-  shadowRay.energy = (1.0 - pow(clamp(dot(sig*normal, u_SunDir), 0.0, 1.0),0.4)) / 2 + 0.5;
+  shadowRay.energy = ray.energy;
   shadowRay.shadow = true;
   return shadowRay;
 }
@@ -308,8 +308,19 @@ RayIntersection SingleRay(Ray ray, inout vec3 color)
       // Shadow ray
       Ray shadowRay = GetShadowRay(ray, intersection);
       RayIntersection shadowIntersection = RayMarchShadow(shadowRay);
+        vec3 normal = vec3(0,0,0);
+        normal[intersection.collisionDir] = -sign(ray.dir[intersection.collisionDir]);
       if(shadowIntersection.found)
-        color *= shadowRay.energy; // Energy for shadows is how much it shouldn't shade
+      {
+        // Full shadow
+        color *= 0.4;
+      }
+      else
+      {
+
+        // Diffuse lighting
+        color *= max(dot(normal, shadowRay.dir), 0.4);
+      }
     }
     else
     {
