@@ -26,7 +26,6 @@ struct Ray
   float rayLength;
   float energy;
   float voxel;
-  bool shadow;
 };
 
 struct RayIntersection
@@ -40,6 +39,8 @@ struct RayIntersection
   bool found;
 };
 
+//#define _COLOR_ONLY
+#ifndef _COLOR_ONLY
 struct Material
 {
   float reflectivity;
@@ -58,6 +59,27 @@ Material materials[c_Materials] = {
   Material(0.6,1.5,true,1,1,1,0,1), // Glass
   Material(0,1,false,0.4,0.1,1,1,1), // Grass
 };
+#else
+
+struct Material
+{
+  float reflectivity;
+  float refractivity;
+  bool transparent;
+  float diffuseFactor;
+  float specularityFactor;
+  float specularityExponent;
+  vec4 color;
+};
+
+Material materials[c_Materials] = {
+  Material(0,1,true,0,0,0,vec4(0)), // Air
+  Material(0,1,false,0.4,0.2,10,vec4(0.5,0.5,0.5,1.0)), // Stone
+  Material(0.6,1.5,true,1,1,1,vec4(0)), // Glass
+  Material(0,1,false,0.4,0.2,10,vec4(0.05,0.5,0.1,1)), // Grass
+};
+
+#endif
 
 float ambient = 0.4;
 
@@ -92,7 +114,6 @@ Ray GetShadowRay(Ray ray, RayIntersection intersection)
   shadowRay.dir = normalize(u_SunDir);
   shadowRay.rayLength = intersection.rayLength;
   shadowRay.energy = ray.energy;
-  shadowRay.shadow = true;
   return shadowRay;
 }
 
@@ -106,7 +127,6 @@ Ray GetReflectionRay(Ray ray, RayIntersection intersection)
   reflectionRay.dir[intersection.collisionDir] = -ray.dir[intersection.collisionDir];
   reflectionRay.rayLength = intersection.rayLength;
   reflectionRay.energy = material.reflectivity * ray.energy;
-  reflectionRay.shadow = false;
   return reflectionRay;
 }
 
@@ -132,7 +152,6 @@ Ray GetRefractionRay(Ray ray, RayIntersection intersection)
   }
   refractionRay.rayLength = intersection.rayLength;
   refractionRay.energy = ray.energy;
-  refractionRay.shadow = false;
   return refractionRay;
 }
 
@@ -157,12 +176,16 @@ vec2 GetTextureCoordinate(vec2 voxelPlane, int x, int y)
 vec4 GetColor(RayIntersection intersection)
 {
   Material mat = GetMaterial(intersection.voxel);
+#ifndef _COLOR_ONLY
   vec2 texCoord = GetTextureCoordinate(
       vec2(
         intersection.collisionPoint[intersection.texAxis1],
         intersection.collisionPoint[intersection.texAxis2]),
       mat.texX,mat.texY);
   return texture(u_TextureUnit, texCoord);
+#else
+  return mat.color;
+#endif
 }
 
 vec3 RayColor(Ray ray, RayIntersection intersection, vec3 color)
@@ -323,7 +346,6 @@ RayIntersection SingleRay(Ray ray, inout vec3 color)
       else
       {
         Material material = GetMaterial(intersection.voxel);
-        // Diffuse lighting
         float diffuse = material.diffuseFactor * max(dot(normal, shadowRay.dir), 0.0);
         float specular = material.specularityFactor * pow(max(dot(reflect(shadowRay.dir, normal), ray.dir), 0.0f), material.specularityExponent);
         color *= ambient + diffuse + specular;
@@ -362,7 +384,7 @@ void TransparentRay(Ray ray, RayIntersection intersection, inout vec3 color)
 void main()
 {
   vec3 color = vec3(0,0,0);
-  Ray ray = Ray(v_Near + vec3(u_Size*0.5), normalize(v_Dir), 0, 1, 0.0, false);
+  Ray ray = Ray(v_Near + vec3(u_Size*0.5), normalize(v_Dir), 0, 1, 0.0);
   RayIntersection intersection = SingleRay(ray, color);
   if(intersection.found)
   {
