@@ -45,16 +45,21 @@ struct Material
   float reflectivity;
   float refractivity;
   bool transparent;
+  float diffuseFactor;
+  float specularityFactor;
+  float specularityExponent;
   int texX;
   int texY;
 };
 
 Material materials[c_Materials] = {
-  Material(0,1,true,0,0), // Air
-  Material(0,1,false,0,0), // Stone
-  Material(0.6,1.5,true,0,1), // Glass
-  Material(0,1,false,1,1) // Grass
+  Material(0,1,true,0,0,0,0,0), // Air
+  Material(0,1,false,0.4,0.2,10,0,0), // Stone
+  Material(0.6,1.5,true,1,1,1,0,1), // Glass
+  Material(0,1,false,0.4,0.1,1,1,1), // Grass
 };
+
+float ambient = 0.4;
 
 int intersectionAxis[3][3] = {{0,2,1}, {1,0,2}, {2,0,1}};
 
@@ -313,13 +318,15 @@ RayIntersection SingleRay(Ray ray, inout vec3 color)
       if(shadowIntersection.found)
       {
         // Full shadow
-        color *= 0.4;
+        color *= ambient;
       }
       else
       {
-
+        Material material = GetMaterial(intersection.voxel);
         // Diffuse lighting
-        color *= max(dot(normal, shadowRay.dir), 0.4);
+        float diffuse = material.diffuseFactor * max(dot(normal, shadowRay.dir), 0.0);
+        float specular = material.specularityFactor * pow(max(dot(reflect(shadowRay.dir, normal), ray.dir), 0.0f), material.specularityExponent);
+        color *= ambient + diffuse + specular;
       }
     }
     else
