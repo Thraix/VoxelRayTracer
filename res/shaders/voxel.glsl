@@ -46,6 +46,7 @@ struct Material
   float reflectivity;
   float refractivity;
   bool transparent;
+  bool reflective;
   float diffuseFactor;
   float specularityFactor;
   float specularityExponent;
@@ -54,10 +55,10 @@ struct Material
 };
 
 Material materials[c_Materials] = {
-  Material(0,1,true,0,0,0,0,0), // Air
-  Material(0,1,false,0.4,0.2,10,0,0), // Stone
-  Material(0.6,1.5,true,1,1,1,0,1), // Glass
-  Material(0,1,false,0.4,0.1,1,1,1), // Grass
+  Material(0,1,true,false,0,0,0,0,0), // Air
+  Material(0,1,false,false,0.4,0.2,10,0,0), // Stone
+  Material(0.6,1.5,true,true,1,1,1,0,1), // Glass
+  Material(0,1,false,false,0.4,0.1,1,1,1), // Grass
 };
 #else
 
@@ -66,6 +67,7 @@ struct Material
   float reflectivity;
   float refractivity;
   bool transparent;
+  bool reflective;
   float diffuseFactor;
   float specularityFactor;
   float specularityExponent;
@@ -73,10 +75,10 @@ struct Material
 };
 
 Material materials[c_Materials] = {
-  Material(0,1,true,0,0,0,vec4(0)), // Air
-  Material(0,1,false,0.4,0.2,10,vec4(0.5,0.5,0.5,1.0)), // Stone
-  Material(0.6,1.5,true,1,1,1,vec4(0)), // Glass
-  Material(0,1,false,0.4,0.2,10,vec4(0.05,0.5,0.1,1)), // Grass
+  Material(0,1,true,false,0,0,0,vec4(0)), // Air
+  Material(0,1,false,false,0.4,0.2,10,vec4(0.5,0.5,0.5,1.0)), // Stone
+  Material(0.6,1.5,true,true,1,1,1,vec4(0)), // Glass
+  Material(0,1,false,false,0.4,0.2,10,vec4(0.05,0.5,0.1,1)), // Grass
 };
 
 #endif
@@ -190,7 +192,8 @@ vec4 GetColor(RayIntersection intersection)
 
 vec3 RayColor(Ray ray, RayIntersection intersection, vec3 color)
 {
-  return mix(GetColor(intersection).xyz, color, 1.0 - ray.energy);
+  vec4 rayColor = GetColor(intersection);
+  return color * (1.0 - ray.energy) + rayColor.rgb * ray.energy * rayColor.a;
 }
 
 RayIntersection RayMarchShadow(inout Ray ray)
@@ -325,7 +328,7 @@ vec3 GetSkyboxColor(Ray ray, vec3 color)
   return mix(skyboxColor, color, 1.0 - ray.energy);
 }
 
-RayIntersection SingleRay(Ray ray, inout vec3 color)
+RayIntersection TraceWithShadow(Ray ray, inout vec3 color)
 {
   if(ray.energy > 0.1)
   {
@@ -353,54 +356,54 @@ RayIntersection SingleRay(Ray ray, inout vec3 color)
     }
     else
     {
-      color = GetSkyboxColor(ray, color);
+      color = mix(GetSkyboxColor(ray, color), color, 1 - ray.energy);
     }
     return intersection;
   }
   return RayIntersection(0, vec3(0,0,0), 0, 0, 1, 2, false);
 }
 
-void TransparentRay(Ray ray, RayIntersection intersection, inout vec3 color)
-{
-  Material mat = GetMaterial(intersection.voxel);
-
-  int count = 0;
-  while(intersection.found && mat.transparent && count < 10)
-  {
-    if(GetColor(intersection).a != 1)
-    {
-      ray = GetRefractionRay(ray, intersection);
-      intersection = SingleRay(ray, color);
-      mat = GetMaterial(intersection.voxel);
-      count++;
-    }
-    else
-    {
-      break;
-    }
-  }
-}
+#define MAX_REFLECTIONS 3
+#define MAX_TRANSPARENCIES 3
 
 void main()
 {
-  vec3 color = vec3(0,0,0);
   Ray ray = Ray(v_Near + vec3(u_Size*0.5), normalize(v_Dir), 0, 1, 0.0);
-  RayIntersection intersection = SingleRay(ray, color);
-  if(intersection.found)
+  vec3 color = vec3(0,0,0);
+
+  // max reflections + max transparencies
+  Ray[MAX_REFLECTIONS + MAX_TRANSPARENCIES + 1] stack;
+  stack[0] = ray;
+  int stackSize = 1;
+
+  int reflections = 1;
+  int transparencies = 0;
+
+  while(stackSize > 0)
   {
-    TransparentRay(ray, intersection, color);
-    Ray reflectionRay = GetReflectionRay(ray, intersection);
-    RayIntersection reflectionIntersection =  SingleRay(reflectionRay, color);
-    if(reflectionIntersection.found)
+    Ray ray = stack[--stackSize];
+    RayIntersection intersection = TraceWithShadow(ray, color);
+    if(intersection.found)
     {
-      TransparentRay(reflectionRay, reflectionIntersection, color);
+      Material material = GetMaterial(intersection.voxel);
+      if(material.reflective && reflections < MAX_REFLECTIONS)
+      {
+        stack[stackSize++] = GetReflectionRay(ray, intersection);
+        stack[stackSize - 1].energy = ray.energy * 0.5;
+        reflections++;
+      }
+      if(material.transparent && transparencies < MAX_TRANSPARENCIES && GetColor(intersection).a != 1)
+      {
+        stack[stackSize++] = GetRefractionRay(ray, intersection);
+        stack[stackSize - 1].energy = ray.energy;
+        transparencies++;
+      }
+      if(HasVoxel(ray.voxel))
+        transparencies--;
+      else
+        reflections--;
     }
   }
-  else
-  {
-    color = GetSkyboxColor(ray, color);
-  }
-
   f_Color = vec4(color, 1.0);
 }
 
