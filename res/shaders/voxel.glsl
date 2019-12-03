@@ -106,6 +106,13 @@ Material GetMaterial(float voxel)
   return materials[i];
 }
 
+float Fresnel(Ray ray, RayIntersection intersection)
+{
+  vec3 normal = vec3(0,0,0);
+  normal[intersection.collisionDir] = sign(ray.dir[intersection.collisionDir]);
+  return 1.0 - dot(normal, ray.dir);
+}
+
 Ray GetShadowRay(Ray ray, RayIntersection intersection)
 {
   Ray shadowRay;
@@ -130,7 +137,7 @@ Ray GetReflectionRay(Ray ray, RayIntersection intersection)
   reflectionRay.dir = ray.dir;
   reflectionRay.dir[intersection.collisionDir] = -ray.dir[intersection.collisionDir];
   reflectionRay.rayLength = intersection.rayLength;
-  reflectionRay.energy = material.reflectivity * ray.energy;
+  reflectionRay.energy = ray.energy * Fresnel(ray, intersection);
   reflectionRay.reflectionDepth = ray.reflectionDepth+1; 
   return reflectionRay;
 }
@@ -194,10 +201,10 @@ vec4 GetColor(RayIntersection intersection)
 #endif
 }
 
-vec3 RayColor(Ray ray, RayIntersection intersection, vec3 color, float darkness)
+vec3 RayColor(Ray ray, RayIntersection intersection, vec3 color, float brightness)
 {
   vec4 rayColor = GetColor(intersection);
-  return color * (1.0 - ray.energy) + rayColor.rgb * ray.energy * rayColor.a * darkness;
+  return color * (1.0 - ray.energy) + rayColor.rgb * ray.energy * rayColor.a * brightness;
 }
 
 RayIntersection RayMarchShadow(inout Ray ray)
@@ -334,45 +341,34 @@ vec3 GetSkyboxColor(Ray ray, vec3 color)
 
 RayIntersection TraceWithShadow(Ray ray, inout vec3 color)
 {
-  //if(ray.energy > 0.1)
+  RayIntersection intersection = RayMarch(ray);
+  if(intersection.found)
   {
-    RayIntersection intersection = RayMarch(ray);
-    if(intersection.found)
+    // Shadow ray
+    Ray shadowRay = GetShadowRay(ray, intersection);
+    RayIntersection shadowIntersection = RayMarchShadow(shadowRay);
+      vec3 normal = vec3(0,0,0);
+      normal[intersection.collisionDir] = -sign(ray.dir[intersection.collisionDir]);
+    float brightness = 0.0f;
+    if(shadowIntersection.found)
     {
-      // Shadow ray
-      Ray shadowRay = GetShadowRay(ray, intersection);
-      RayIntersection shadowIntersection = RayMarchShadow(shadowRay);
-        vec3 normal = vec3(0,0,0);
-        normal[intersection.collisionDir] = -sign(ray.dir[intersection.collisionDir]);
-      float darkness = 0.0f;
-      if(shadowIntersection.found)
-      {
-        // Full shadow
-        darkness = ambient;
-      }
-      else
-      {
-        Material material = GetMaterial(intersection.voxel);
-        float diffuse = material.diffuseFactor * max(dot(normal, shadowRay.dir), 0.0);
-        float specular = material.specularityFactor * pow(max(dot(reflect(shadowRay.dir, normal), ray.dir), 0.0f), material.specularityExponent);
-        darkness = ambient + diffuse + specular;
-      }
-      color = RayColor(ray, intersection, color, darkness);
+      // Full shadow
+      brightness = ambient;
     }
     else
     {
-      color = mix(GetSkyboxColor(ray, color), color, 1 - ray.energy);
+      Material material = GetMaterial(intersection.voxel);
+      float diffuse = material.diffuseFactor * max(dot(normal, shadowRay.dir), 0.0);
+      float specular = material.specularityFactor * pow(max(dot(reflect(shadowRay.dir, normal), ray.dir), 0.0f), material.specularityExponent);
+      brightness  = ambient + diffuse + specular;
     }
-    return intersection;
+    color = RayColor(ray, intersection, color, brightness);
   }
-  return RayIntersection(0, vec3(0,0,0), 0, 0, 1, 2, false);
-}
-
-float Fresnel(Ray ray, RayIntersection intersection)
-{
-  vec3 normal = vec3(0,0,0);
-  normal[intersection.collisionDir] = sign(ray.dir[intersection.collisionDir]);
-  return pow(1.0 - dot(normal, ray.dir), 1);
+  else
+  {
+    color = mix(GetSkyboxColor(ray, color), color, 1 - ray.energy);
+  }
+  return intersection;
 }
 
 #define MAX_REFLECTIONS 1
@@ -400,12 +396,10 @@ void main()
       if(material.reflective && ray.reflectionDepth < MAX_REFLECTIONS)
       {
         stack[stackSize++] = GetReflectionRay(ray, intersection);
-        stack[stackSize - 1].energy = ray.energy * Fresnel(ray, intersection);
       }
       if(material.transparent && transparencies < MAX_TRANSPARENCIES && GetColor(intersection).a != 1)
       {
         stack[stackSize++] = GetRefractionRay(ray, intersection);
-        stack[stackSize - 1].energy = ray.energy;
         transparencies++;
       }
       if(HasVoxel(ray.voxel))
