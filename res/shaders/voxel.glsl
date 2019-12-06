@@ -44,7 +44,6 @@ struct RayIntersection
 #ifndef _COLOR_ONLY
 struct Material
 {
-  float reflectivity;
   float refractivity;
   bool transparent;
   bool reflective;
@@ -56,16 +55,15 @@ struct Material
 };
 
 Material materials[c_Materials] = {
-  Material(0,1,true,false,0,0,0,0,0), // Air
-  Material(0,1,false,false,0.4,0.2,10,0,0), // Stone
-  Material(0.6,1.5,true,true,1,1,1,0,1), // Glass
-  Material(0,1,false,false,0.4,0.1,1,1,1), // Grass
+  Material(1,true,false,0,0,0,0,0), // Air
+  Material(1,false,false,0.4,0.2,10,0,0), // Stone
+  Material(1.5,true,true,1,1,1,0,1), // Glass
+  Material(1,false,false,0.4,0.1,1,1,1), // Grass
 };
 #else
 
 struct Material
 {
-  float reflectivity;
   float refractivity;
   bool transparent;
   bool reflective;
@@ -76,10 +74,10 @@ struct Material
 };
 
 Material materials[c_Materials] = {
-  Material(0,1,true,false,0,0,0,vec4(0)), // Air
-  Material(0,1,false,false,0.4,0.2,10,vec4(0.5,0.5,0.5,1.0)), // Stone
-  Material(0.6,1.5,true,true,1,1,1,vec4(0)), // Glass
-  Material(0,1,false,false,0.4,0.2,10,vec4(0.05,0.5,0.1,1)), // Grass
+  Material(1,true,false,0,0,0,vec4(0)), // Air
+  Material(1,false,false,0.4,0.2,10,vec4(0.5,0.5,0.5,1.0)), // Stone
+  Material(1.5,true,true,1,1,1,vec4(0)), // Glass
+  Material(1,false,false,0.4,0.2,10,vec4(0.05,0.5,0.1,1)), // Grass
 };
 
 #endif
@@ -87,6 +85,55 @@ Material materials[c_Materials] = {
 float ambient = 0.4;
 
 int intersectionAxis[3][3] = {{0,2,1}, {1,0,2}, {2,0,1}};
+
+// ------------------ RANDOMIZATION CODE BEGIN ------------------------------
+
+// A single iteration of Bob Jenkins' One-At-A-Time hashing algorithm.
+uint Hash(uint x) 
+{
+    x += ( x << 10u );
+    x ^= ( x >>  6u );
+    x += ( x <<  3u );
+    x ^= ( x >> 11u );
+    x += ( x << 15u );
+    return x;
+}
+
+uint Hash(uvec4 v) 
+{ 
+  return Hash(v.x ^ Hash(v.y) ^ Hash(v.z) ^ Hash(v.w));
+}
+
+// Construct a float with half-open range [0:1] using low 23 bits.
+// All zeroes yields 0.0, all ones yields the next smallest representable value below 1.0.
+float FloatConstruct( uint m ) 
+{
+    const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
+    const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
+
+    m &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
+    m |= ieeeOne;                          // Add fractional part to 1.0
+
+    float  f = uintBitsToFloat( m );       // Range [1:2]
+    return f - 1.0;                        // Range [0:1]
+}
+
+float Random( vec4  v ) 
+{ 
+  return FloatConstruct(Hash(floatBitsToUint(v))); 
+}
+
+vec3 RandomizeDirection(vec3 dir, vec3 pos, float randomness)
+{
+  // Bad solution
+  float dx = Random(vec4(pos * dir, 0));
+  float dy = Random(vec4(pos * dir, 0.5));
+  float dz = Random(vec4(pos * dir, 1));
+
+  return normalize(dir + vec3(dx, dy, dz) * randomness * 2);
+}
+
+// ------------------ RANDOMIZATION CODE END ------------------------------
 
 bool HasVoxel(float value)
 {
@@ -134,8 +181,8 @@ Ray GetReflectionRay(Ray ray, RayIntersection intersection)
   Ray reflectionRay;
   reflectionRay.voxel = 0;
   reflectionRay.pos = intersection.collisionPoint;
-  reflectionRay.dir = ray.dir;
-  reflectionRay.dir[intersection.collisionDir] = -ray.dir[intersection.collisionDir];
+  reflectionRay.dir = RandomizeDirection(ray.dir, intersection.collisionPoint, 0.01);
+  reflectionRay.dir[intersection.collisionDir] = -reflectionRay.dir[intersection.collisionDir];
   reflectionRay.rayLength = intersection.rayLength;
   reflectionRay.energy = ray.energy * Fresnel(ray, intersection);
   reflectionRay.reflectionDepth = ray.reflectionDepth+1; 
@@ -161,6 +208,10 @@ Ray GetRefractionRay(Ray ray, RayIntersection intersection)
   {
     refractionRay = GetReflectionRay(ray, intersection);
     refractionRay.voxel = ray.voxel;
+  }
+  else
+  {
+    refractionRay.dir = RandomizeDirection(refractionRay.dir, refractionRay.pos, 0.0025);
   }
   refractionRay.rayLength = intersection.rayLength;
   refractionRay.energy = ray.energy;
