@@ -156,7 +156,7 @@ class AppScene : public Scene
       vao->SetIndexBuffer(ibo);
       ibo->Disable();
       vao->Disable();
-      size = 16;
+      size = 32;
       //std::vector<float> data = Greet::Noise::GenNoise(size, size, size, 3, 4, 4, 4, 2, 0, 0, 0);
       /* static std::vector<float> GenNoise(uint width, uint height, uint length,
        * uint octave, uint stepX, uint stepY, uint stepZ, float persistance, int
@@ -252,8 +252,8 @@ class AppScene : public Scene
       shader->SetUniform1i("u_ChunkTexUnit", 1);
       shader->SetUniform1i("u_SkyboxUnit", 2);
       Vec2 dir = Vec2{1,0};
-      dir.RotateR(timer);
-      shader->SetUniform3f("u_SunDir", Vec3<float>{dir.x, 1, dir.y}.Normalize());
+      dir.RotateR(timer * 0.5);
+      shader->SetUniform3f("u_SunDir", Vec3<float>{dir.y, dir.x, 0.2}.Normalize());
       vao->Enable();
       glBeginQuery(GL_TIME_ELAPSED, 1);
       vao->Render(DrawType::TRIANGLES, 6);

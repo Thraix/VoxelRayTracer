@@ -82,7 +82,7 @@ Material materials[c_Materials] = {
 
 #endif
 
-float ambient = 0.4;
+float ambient = 0.3;
 
 int intersectionAxis[3][3] = {{0,2,1}, {1,0,2}, {2,0,1}};
 
@@ -386,7 +386,7 @@ vec3 GetSkyboxColor(Ray ray, vec3 color)
   vec3 unitDir = normalize(ray.dir);
   float sun = 10 * pow(dot(normalize(u_SunDir), unitDir), 400.0);
   float grad = (unitDir.y + 1.0) * 0.5;
-  vec3 skyboxColor = max(vec3(0,grad*0.75,grad), vec3(sun, sun, 0));
+  vec3 skyboxColor = max(vec3(0,grad*0.75,grad), vec3(sun, sun, 0)) * max(u_SunDir.y, 0.0);
   return mix(skyboxColor, color, 1.0 - ray.energy);
 }
 
