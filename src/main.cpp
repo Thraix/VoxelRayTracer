@@ -1,4 +1,7 @@
 #include <Greet.h>
+
+#include "FrameBuffer.h"
+
 #include <thread>
 
 using namespace Greet;
@@ -115,13 +118,17 @@ class CamController
         cam.SetRotation(rot);
     }
 };
+
 class AppScene : public Scene
 {
   public:
-    Ref<Shader> shader;
+    Ref<Shader> rayTracingShader;
+    Ref<Shader> filterShader;
     Ref<VertexArray> vao;
     Ref<VertexBuffer> vbo;
     Ref<Buffer> ibo;
+    Ref<FrameBuffer> fbo1;
+    Ref<FrameBuffer> fbo2;
     float timer = 0;
     Ref<uint> texture3D;
     Cam cam;
@@ -132,6 +139,9 @@ class AppScene : public Scene
     AppScene()
       : cam{Mat4::ProjectionMatrix(RenderCommand::GetViewportAspect(), 90, 0.01,100.0f)}, camController{cam}
     {
+      fbo1 = FrameBuffer::Create(RenderCommand::GetViewportWidth(), RenderCommand::GetViewportHeight());
+      fbo2 = FrameBuffer::Create(RenderCommand::GetViewportWidth(), RenderCommand::GetViewportHeight());
+
       cam.SetPosition({-3.45, 2.17, 3.53});
       cam.SetRotation({-33.00, -48.00, 0.00});
       Vec2 screen[4] = {
@@ -162,7 +172,8 @@ class AppScene : public Scene
        * uint octave, uint stepX, uint stepY, uint stepZ, float persistance, int
        * offsetX, int offsetY, int offsetZ); */
       std::vector<float> noise = Greet::Noise::GenNoise(size, size, 5, 10, 10, 0.5, 0, 0);
-      shader = Shader::FromFile("res/shaders/voxel.glsl");
+      rayTracingShader = Shader::FromFile("res/shaders/voxel.glsl");
+      filterShader = Shader::FromFile("res/shaders/temporal.glsl");
       uint tex;
       GLCall(glGenTextures(1, &tex));
       std::vector<byte> data(size * size * size);
@@ -237,35 +248,46 @@ class AppScene : public Scene
 
     virtual void Render() const override
     {
+      fbo1->Enable();
       TextureManager::Get2D("stone").Enable(0);
       atlas->Enable(0);
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_3D, *texture3D);
       TextureManager::Get3D("skybox").Enable(2);
-      shader->Enable();
-      shader->SetUniformMat4("u_PVInvMatrix", cam.GetInvPVMatrix());
-      shader->SetUniformMat4("u_ViewMatrix", cam.GetViewMatrix());
-      shader->SetUniform1i("u_Size", size);
-      shader->SetUniform1i("u_AtlasSize", atlas->GetAtlasSize());
-      shader->SetUniform1i("u_AtlasTextureSize", atlas->GetTextureSize());
-      shader->SetUniform1i("u_TextureUnit", 0);
-      shader->SetUniform1i("u_ChunkTexUnit", 1);
-      shader->SetUniform1i("u_SkyboxUnit", 2);
+      rayTracingShader->Enable();
+      rayTracingShader->SetUniformMat4("u_PVInvMatrix", cam.GetInvPVMatrix());
+      rayTracingShader->SetUniformMat4("u_ViewMatrix", cam.GetViewMatrix());
+      rayTracingShader->SetUniform1i("u_Size", size);
+      rayTracingShader->SetUniform1i("u_AtlasSize", atlas->GetAtlasSize());
+      rayTracingShader->SetUniform1i("u_AtlasTextureSize", atlas->GetTextureSize());
+      rayTracingShader->SetUniform1i("u_TextureUnit", 0);
+      rayTracingShader->SetUniform1i("u_ChunkTexUnit", 1);
+      rayTracingShader->SetUniform1i("u_SkyboxUnit", 2);
       Vec2 dir = Vec2{1,0};
       dir.RotateR(timer * 0.5);
-      shader->SetUniform3f("u_SunDir", Vec3<float>{dir.y, dir.x, 0.2}.Normalize());
+      rayTracingShader->SetUniform3f("u_SunDir", Vec3<float>{dir.y, dir.x, 0.2}.Normalize());
       vao->Enable();
       glBeginQuery(GL_TIME_ELAPSED, 1);
       vao->Render(DrawType::TRIANGLES, 6);
       glEndQuery(GL_TIME_ELAPSED);
       vao->Disable();
-      shader->Disable();
+      rayTracingShader->Disable();
       GLuint64 result;
       glGetQueryObjectui64v(1, GL_QUERY_RESULT, &result);
       float ms = result * 1e-6;
       if(ms > 1000)
         abort();
       fps = 1000 / ms;
+      fbo1->Disable();
+
+      // Filter
+      filterShader->Enable();
+      filterShader->SetUniform1i("u_TextureUnitNew", 0);
+      filterShader->SetUniform1i("u_TextureUnitOld", 0);
+      fbo1->GetTexture().Enable(0);
+      vao->Enable();
+      vao->Render(DrawType::TRIANGLES, 6);
+      vao->Disable();
     }
 
     virtual void Update(float timeElapsed) override
@@ -292,6 +314,9 @@ class AppScene : public Scene
     void ViewportResize(ViewportResizeEvent& event) override
     {
       cam.SetProjectionMatrix(Mat4::ProjectionMatrix(event.GetWidth() / event.GetHeight(), 90, 0.01f, 100.0f));
+      fbo1->Enable();
+      fbo1->Resize(event.GetWidth(), event.GetHeight());
+      fbo1->Disable();
     }
 };
 
