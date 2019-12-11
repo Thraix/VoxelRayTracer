@@ -40,9 +40,8 @@ struct RayIntersection
   float voxel;
   vec3 collisionPoint;
   float rayLength;
-  int collisionDir;
-  int texAxis1;
-  int texAxis2;
+  vec3 normal;
+  vec2 texCoord;
   bool found;
 };
 
@@ -96,12 +95,12 @@ int intersectionAxis[3][3] = {{0,2,1}, {1,0,2}, {2,0,1}};
 // A single iteration of Bob Jenkins' One-At-A-Time hashing algorithm.
 uint Hash(uint x) 
 {
-    x += ( x << 10u );
-    x ^= ( x >>  6u );
-    x += ( x <<  3u );
-    x ^= ( x >> 11u );
-    x += ( x << 15u );
-    return x;
+  x += ( x << 10u );
+  x ^= ( x >>  6u );
+  x += ( x <<  3u );
+  x ^= ( x >> 11u );
+  x += ( x << 15u );
+  return x;
 }
 
 uint Hash(uvec4 v) 
@@ -113,14 +112,14 @@ uint Hash(uvec4 v)
 // All zeroes yields 0.0, all ones yields the next smallest representable value below 1.0.
 float FloatConstruct( uint m ) 
 {
-    const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
-    const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
+  const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
+  const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
 
-    m &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
-    m |= ieeeOne;                          // Add fractional part to 1.0
+  m &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
+  m |= ieeeOne;                          // Add fractional part to 1.0
 
-    float  f = uintBitsToFloat( m );       // Range [1:2]
-    return f - 1.0;                        // Range [0:1]
+  float  f = uintBitsToFloat( m );       // Range [1:2]
+  return f - 1.0;                        // Range [0:1]
 }
 
 float Random( vec4  v ) 
@@ -160,9 +159,7 @@ Material GetMaterial(float voxel)
 
 float Fresnel(Ray ray, RayIntersection intersection)
 {
-  vec3 normal = vec3(0,0,0);
-  normal[intersection.collisionDir] = sign(ray.dir[intersection.collisionDir]);
-  return 1.0 - dot(normal, ray.dir);
+  return 1.0 - dot(intersection.normal, ray.dir);
 }
 
 vec2 GetTextureCoordinate(vec2 voxelPlane, int x, int y)
@@ -176,12 +173,7 @@ vec4 GetColor(RayIntersection intersection)
 {
   Material mat = GetMaterial(intersection.voxel);
 #ifndef _COLOR_ONLY
-  vec2 texCoord = GetTextureCoordinate(
-      vec2(
-        intersection.collisionPoint[intersection.texAxis1],
-        intersection.collisionPoint[intersection.texAxis2]),
-      mat.texX,mat.texY);
-  return texture(u_TextureUnit, texCoord);
+  return texture(u_TextureUnit, intersection.texCoord);
 #else
   return mat.color;
 #endif
@@ -197,11 +189,8 @@ vec3 RayColor(Ray ray, RayIntersection intersection, vec3 color, float brightnes
 Ray GetShadowRay(Ray ray, RayIntersection intersection)
 {
   Ray shadowRay;
-  vec3 normal = vec3(0,0,0);
-  normal[intersection.collisionDir] = sign(ray.dir[intersection.collisionDir]);
-  float sig = sign(normal[intersection.collisionDir]) * sign(u_SunDir[intersection.collisionDir]);
   shadowRay.voxel = intersection.voxel;
-  shadowRay.pos = intersection.collisionPoint - u_SunDir * 0.0001 * sig;
+  shadowRay.pos = intersection.collisionPoint;
   shadowRay.dir = normalize(u_SunDir);
   shadowRay.rayLength = intersection.rayLength;
   shadowRay.energy = ray.energy;
@@ -215,8 +204,7 @@ Ray GetReflectionRay(Ray ray, RayIntersection intersection)
   Ray reflectionRay;
   reflectionRay.voxel = 0;
   reflectionRay.pos = intersection.collisionPoint;
-  reflectionRay.dir = RandomizeDirection(ray.dir, intersection.collisionPoint, 0.001, 0);
-  reflectionRay.dir[intersection.collisionDir] = -reflectionRay.dir[intersection.collisionDir];
+  reflectionRay.dir = RandomizeDirection(reflect(ray.dir, intersection.normal), intersection.collisionPoint, 0.001, 0);
   reflectionRay.rayLength = intersection.rayLength;
   reflectionRay.energy = 0.5;//ray.energy * Fresnel(ray, intersection);
   reflectionRay.reflectionDepth = ray.reflectionDepth+1; 
@@ -226,17 +214,14 @@ Ray GetReflectionRay(Ray ray, RayIntersection intersection)
 
 Ray GetRefractionRay(Ray ray, RayIntersection intersection)
 {
-  vec3 normal = vec3(0,0,0);
-  normal[intersection.collisionDir] = -sign(ray.dir[intersection.collisionDir]);
-
-  float outRefractivity = GetMaterial(GetVoxel(intersection.collisionPoint + normal * 0.5)).refractivity;
-  float inRefractivity= GetMaterial(GetVoxel(intersection.collisionPoint - normal * 0.5)).refractivity;
+  float outRefractivity = GetMaterial(GetVoxel(intersection.collisionPoint + intersection.normal * 0.5)).refractivity;
+  float inRefractivity= GetMaterial(GetVoxel(intersection.collisionPoint - intersection.normal * 0.5)).refractivity;
 
   Material material = GetMaterial(intersection.voxel);
   Ray refractionRay;
   refractionRay.voxel = intersection.voxel;
   refractionRay.pos = intersection.collisionPoint;
-  refractionRay.dir = refract(normalize(ray.dir), normal,  outRefractivity / inRefractivity);
+  refractionRay.dir = refract(normalize(ray.dir), intersection.normal,  outRefractivity / inRefractivity);
 
   // Total Internal Reflection
   if(refractionRay.dir == vec3(0))
@@ -300,15 +285,6 @@ bool RayMarchShadow(inout Ray ray)
 
     if(HasVoxel(voxel))
     {
-      RayIntersection intersection =
-        RayIntersection(
-            voxel,
-            currentPos,
-            rayLength,
-            intersectionAxis[index][0],
-            intersectionAxis[index][1],
-            intersectionAxis[index][2], true);
-
       Material mat = GetMaterial(voxel);
       if(!mat.transparent)
       {
@@ -340,7 +316,7 @@ RayIntersection RayMarch(inout Ray ray)
   {
     if(!TestCube(currentPos, ray.dir, vec3(u_Size*0.5), vec3(u_Size)))
     {
-      return RayIntersection(0, vec3(0,0,0), 0, 0, 1, 2, false);
+      return RayIntersection(0, vec3(0,0,0), 0, vec3(0), vec2(0), false);
     }
     float tMin = min(t.x, min(t.y, t.z));
     t -= tMin;
@@ -351,14 +327,22 @@ RayIntersection RayMarch(inout Ray ray)
     vec3 indices = eq * vec3(0,1,2);
     float voxel = GetVoxel(currentPos + 0.5 * eq * stepDir);
     int index = int(floor(indices.x + indices.y + indices.z));
-    RayIntersection intersection =
-      RayIntersection(
-          voxel,
-          currentPos,
-          rayLength,
-          intersectionAxis[index][0],
-          intersectionAxis[index][1],
-          intersectionAxis[index][2], true);
+
+    vec3 normal = vec3(0);
+    Material mat = GetMaterial(voxel);
+    normal[intersectionAxis[index][0]] = -sign(ray.dir[intersectionAxis[index][0]]);
+    vec2 texCoord = 
+      GetTextureCoordinate(
+          vec2(
+            currentPos[intersectionAxis[index][1]],
+            currentPos[intersectionAxis[index][2]]),
+          mat.texX, mat.texY);
+    RayIntersection intersection = RayIntersection(
+        voxel,
+        currentPos,
+        rayLength,
+        normal,
+        texCoord, true);
 
     if(HasVoxel(voxel) && voxel != rayVoxel)
     {
@@ -389,7 +373,7 @@ RayIntersection RayMarch(inout Ray ray)
     }
     t[intersectionAxis[index][0]] = ((currentPos + stepDir - ray.pos) / ray.dir - (rayLength - ray.rayLength))[intersectionAxis[index][0]];
   }
-  return RayIntersection(0, vec3(0,0,0), 0, 0, 1, 2, false);
+  return RayIntersection(0, vec3(0,0,0), 0, vec3(0), vec2(0), false);
 }
 
 vec3 GetSkyboxColor(Ray ray, vec3 color)
@@ -409,8 +393,6 @@ RayIntersection TraceWithShadow(Ray ray, inout vec3 color)
     // Shadow ray
     Ray shadowRay = GetShadowRay(ray, intersection);
     bool inShadow = RayMarchShadow(shadowRay);
-      vec3 normal = vec3(0,0,0);
-      normal[intersection.collisionDir] = -sign(ray.dir[intersection.collisionDir]);
     float brightness = 0.0f;
     if(inShadow)
     {
@@ -420,8 +402,8 @@ RayIntersection TraceWithShadow(Ray ray, inout vec3 color)
     else
     {
       Material material = GetMaterial(intersection.voxel);
-      float diffuse = material.diffuseFactor * max(dot(normal, shadowRay.dir), 0.0);
-      float specular = material.specularityFactor * pow(max(dot(reflect(shadowRay.dir, normal), ray.dir), 0.0f), material.specularityExponent);
+      float diffuse = material.diffuseFactor * max(dot(intersection.normal, shadowRay.dir), 0.0);
+      float specular = material.specularityFactor * pow(max(dot(reflect(shadowRay.dir, intersection.normal), ray.dir), 0.0f), material.specularityExponent);
       brightness  = ambient + diffuse + specular;
     }
     color = RayColor(ray, intersection, color, brightness);
