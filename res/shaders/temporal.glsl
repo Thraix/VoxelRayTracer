@@ -7,12 +7,15 @@ uniform sampler2D u_TextureUnitOld;
 in vec2 texCoord;
 
 out vec4 color;
-
-uniform float alpha = 0.9;
+uniform int u_Samples = 1;
 
 void main()
 {
-  color = texture(u_TextureUnitNew, texCoord) * alpha + texture(u_TextureUnitOld, texCoord) * (1 - alpha);
+  float alpha = 1.0;
+  vec4 averageColor = texture(u_TextureUnitOld, texCoord);
+  vec4 newColor = texture(u_TextureUnitNew, texCoord);
+  /* color = averageColor + (newColor - averageColor) / u_Samples; */
+  color = alpha * newColor + (1 - alpha) * averageColor;
 }
 
 //vertex

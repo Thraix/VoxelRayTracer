@@ -124,35 +124,48 @@ class AppScene : public Scene
   public:
     Ref<Shader> rayTracingShader;
     Ref<Shader> filterShader;
+    Ref<Shader> passthroughShader;
     Ref<VertexArray> vao;
     Ref<VertexBuffer> vbo;
     Ref<Buffer> ibo;
     Ref<FrameBuffer> fbo1;
     Ref<FrameBuffer> fbo2;
+    Ref<FrameBuffer> fbo3;
+
+    FrameBuffer* lastFrameBuffer = nullptr;
+    FrameBuffer* currentFrameBuffer = nullptr;
+    FrameBuffer* rayTraceFrameBuffer = nullptr;
+
     float timer = 0;
     Ref<uint> texture3D;
     Cam cam;
     CamController camController;
     Ref<Atlas> atlas;
     uint size;
+    uint temporalSamples = 1;
 
     AppScene()
       : cam{Mat4::ProjectionMatrix(RenderCommand::GetViewportAspect(), 90, 0.01,100.0f)}, camController{cam}
     {
-      fbo1 = FrameBuffer::Create(RenderCommand::GetViewportWidth(), RenderCommand::GetViewportHeight());
-      fbo2 = FrameBuffer::Create(RenderCommand::GetViewportWidth(), RenderCommand::GetViewportHeight());
+      fbo1 = FrameBuffer::Create(1440, 810);
+      fbo2 = FrameBuffer::Create(1440, 810);
+      fbo3 = FrameBuffer::Create(1440, 810);
+
+      currentFrameBuffer = fbo1.get();
+      lastFrameBuffer = fbo2.get();
+      rayTraceFrameBuffer = fbo3.get();
 
       cam.SetPosition({-3.45, 2.17, 3.53});
       cam.SetRotation({-33.00, -48.00, 0.00});
       Vec2 screen[4] = {
         {-1.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, -1.0f}, {-1.0f, -1.0f}};
       uint indices[6] = {0, 2, 1, 0, 3, 2};
-      atlas.reset(new Atlas(32,16));
+      atlas.reset(new Atlas(256,128));
       atlas->Enable(0);
-      atlas->AddTexture("stone", "res/textures/stone.png");
-      atlas->AddTexture("dirt", "res/textures/dirt.png");
-      atlas->AddTexture("glass", "res/textures/glass.png");
-      atlas->AddTexture("grass", "res/textures/grass.png");
+      atlas->AddTexture("stone", "res/textures/stone128.png");
+      atlas->AddTexture("dirt", "res/textures/dirt128.png");
+      atlas->AddTexture("glass", "res/textures/glass128.png");
+      atlas->AddTexture("grass", "res/textures/grass128.png");
       atlas->Disable();
 
       vao = VertexArray::Create();
@@ -174,6 +187,7 @@ class AppScene : public Scene
       std::vector<float> noise = Greet::Noise::GenNoise(size, size, 5, 10, 10, 0.5, 0, 0);
       rayTracingShader = Shader::FromFile("res/shaders/voxel.glsl");
       filterShader = Shader::FromFile("res/shaders/temporal.glsl");
+      passthroughShader  = Shader::FromFile("res/shaders/passthrough.glsl");
       uint tex;
       GLCall(glGenTextures(1, &tex));
       std::vector<byte> data(size * size * size);
@@ -248,7 +262,8 @@ class AppScene : public Scene
 
     virtual void Render() const override
     {
-      fbo1->Enable();
+      rayTraceFrameBuffer->Enable();
+      rayTraceFrameBuffer->Clear();
       TextureManager::Get2D("stone").Enable(0);
       atlas->Enable(0);
       glActiveTexture(GL_TEXTURE1);
@@ -263,8 +278,11 @@ class AppScene : public Scene
       rayTracingShader->SetUniform1i("u_TextureUnit", 0);
       rayTracingShader->SetUniform1i("u_ChunkTexUnit", 1);
       rayTracingShader->SetUniform1i("u_SkyboxUnit", 2);
+      static float i = 0;
+      i++;
+      rayTracingShader->SetUniform1f("u_Time", i);
       Vec2 dir = Vec2{1,0};
-      dir.RotateR(timer * 0.5);
+      dir.RotateR(timer * 0.125);
       rayTracingShader->SetUniform3f("u_SunDir", Vec3<float>{dir.y, dir.x, 0.2}.Normalize());
       vao->Enable();
       glBeginQuery(GL_TIME_ELAPSED, 1);
@@ -278,16 +296,36 @@ class AppScene : public Scene
       if(ms > 1000)
         abort();
       fps = 1000 / ms;
-      fbo1->Disable();
+      rayTraceFrameBuffer->Disable();
 
       // Filter
+      currentFrameBuffer->Enable();
+      currentFrameBuffer->Clear();
       filterShader->Enable();
       filterShader->SetUniform1i("u_TextureUnitNew", 0);
-      filterShader->SetUniform1i("u_TextureUnitOld", 0);
-      fbo1->GetTexture().Enable(0);
+      filterShader->SetUniform1i("u_TextureUnitOld", 1);
+      filterShader->SetUniform1i("u_Samples", temporalSamples);
+      rayTraceFrameBuffer->GetTexture().Enable(0);
+      lastFrameBuffer->GetTexture().Enable(1);
       vao->Enable();
       vao->Render(DrawType::TRIANGLES, 6);
       vao->Disable();
+      currentFrameBuffer->Disable();
+
+      // Passthrough
+      passthroughShader->Enable();
+      passthroughShader->SetUniform1i("u_TextureUnit", 0);
+      currentFrameBuffer->GetTexture().Enable(0);
+      vao->Enable();
+      vao->Render(DrawType::TRIANGLES, 6);
+      vao->Disable();
+    }
+
+    virtual void PostRender() override
+    {
+      // Swap buffers
+      std::swap(lastFrameBuffer, currentFrameBuffer);
+      temporalSamples++;
     }
 
     virtual void Update(float timeElapsed) override
@@ -307,6 +345,12 @@ class AppScene : public Scene
           cam.SetPosition({-3.45, 2.17, 3.53});
           cam.SetRotation({-33.00, -48.00, 0.00});
         }
+        else if(e.GetButton() == GREET_KEY_F)
+        {
+          Log::Info("Clear Framebuffer");
+          std::swap(lastFrameBuffer, rayTraceFrameBuffer);
+          temporalSamples = 1;
+        }
       }
 
     }
@@ -316,7 +360,11 @@ class AppScene : public Scene
       cam.SetProjectionMatrix(Mat4::ProjectionMatrix(event.GetWidth() / event.GetHeight(), 90, 0.01f, 100.0f));
       fbo1->Enable();
       fbo1->Resize(event.GetWidth(), event.GetHeight());
-      fbo1->Disable();
+      fbo2->Enable();
+      fbo2->Resize(event.GetWidth(), event.GetHeight());
+      fbo3->Enable();
+      fbo3->Resize(event.GetWidth(), event.GetHeight());
+      FrameBuffer::Disable();
     }
 };
 

@@ -21,6 +21,7 @@ class FrameBuffer
 
     const Greet::Texture2D& GetTexture() const;
     void Enable();
+    void Clear();
     static void Disable();
 
     static Greet::Ref<FrameBuffer> Create(uint width, uint height);

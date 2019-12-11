@@ -1,6 +1,10 @@
 //fragment
 #version 450 core
 
+#define MAX_REFLECTIONS 1
+#define MAX_TRANSPARENCIES 2
+//#define _COLOR_ONLY
+
 in vec3 v_Near;
 in vec3 v_Dir;
 in vec3 v_CameraPos;
@@ -16,6 +20,7 @@ uniform int u_Size;
 uniform int u_AtlasSize;
 uniform int u_AtlasTextureSize;
 uniform vec3 u_SunDir;
+uniform float u_Time;
 
 const int c_Materials = 4;
 
@@ -40,7 +45,6 @@ struct RayIntersection
   bool found;
 };
 
-//#define _COLOR_ONLY
 #ifndef _COLOR_ONLY
 struct Material
 {
@@ -56,9 +60,9 @@ struct Material
 
 Material materials[c_Materials] = {
   Material(1,true,false,0,0,0,0,0), // Air
-  Material(1,false,false,0.4,0.2,10,0,0), // Stone
+  Material(1,false,false,0.4,0.6,60,0,0), // Stone
   Material(1.5,true,true,1,1,1,0,1), // Glass
-  Material(1,false,false,0.4,0.1,1,1,1), // Grass
+  Material(1,false,false,0.4,0.4,20,1,1), // Grass
 };
 #else
 
@@ -123,14 +127,14 @@ float Random( vec4  v )
   return FloatConstruct(Hash(floatBitsToUint(v))); 
 }
 
-vec3 RandomizeDirection(vec3 dir, vec3 pos, float randomness)
+vec3 RandomizeDirection(vec3 dir, vec3 pos, float randomness, float seed)
 {
   // Bad solution
-  float dx = Random(vec4(pos * dir, 0));
-  float dy = Random(vec4(pos * dir, 0.5));
-  float dz = Random(vec4(pos * dir, 1));
+  float dx = Random(vec4(pos + dir + seed, 0 + seed));
+  float dy = Random(vec4(pos + dir + seed, 0.5 + seed));
+  float dz = Random(vec4(pos + dir + seed, 1.0 + seed));
 
-  return normalize(dir + vec3(dx, dy, dz) * randomness * 2);
+  return dir;//normalize(dir + (vec3(dx, dy, dz) - 0.5) * randomness * 0.0001);
 }
 
 // ------------------ RANDOMIZATION CODE END ------------------------------
@@ -160,6 +164,35 @@ float Fresnel(Ray ray, RayIntersection intersection)
   return 1.0 - dot(normal, ray.dir);
 }
 
+vec2 GetTextureCoordinate(vec2 voxelPlane, int x, int y)
+{
+  vec2 texCoord = voxelPlane - floor(voxelPlane);
+  texCoord = vec2(texCoord.x + x, 1 - texCoord.y + y) * u_AtlasTextureSize / u_AtlasSize;
+  return vec2(texCoord.x, 1.0f - texCoord.y);
+}
+
+vec4 GetColor(RayIntersection intersection)
+{
+  Material mat = GetMaterial(intersection.voxel);
+#ifndef _COLOR_ONLY
+  vec2 texCoord = GetTextureCoordinate(
+      vec2(
+        intersection.collisionPoint[intersection.texAxis1],
+        intersection.collisionPoint[intersection.texAxis2]),
+      mat.texX,mat.texY);
+  return texture(u_TextureUnit, texCoord);
+#else
+  return mat.color;
+#endif
+}
+
+vec3 RayColor(Ray ray, RayIntersection intersection, vec3 color, float brightness)
+{
+  vec4 rayColor = GetColor(intersection);
+  return mix(color, rayColor.rgb * rayColor.a * brightness, ray.energy);
+}
+
+
 Ray GetShadowRay(Ray ray, RayIntersection intersection)
 {
   Ray shadowRay;
@@ -181,7 +214,7 @@ Ray GetReflectionRay(Ray ray, RayIntersection intersection)
   Ray reflectionRay;
   reflectionRay.voxel = 0;
   reflectionRay.pos = intersection.collisionPoint;
-  reflectionRay.dir = RandomizeDirection(ray.dir, intersection.collisionPoint, 0.01);
+  reflectionRay.dir = RandomizeDirection(ray.dir, intersection.collisionPoint, 0.001, 0);
   reflectionRay.dir[intersection.collisionDir] = -reflectionRay.dir[intersection.collisionDir];
   reflectionRay.rayLength = intersection.rayLength;
   reflectionRay.energy = ray.energy * Fresnel(ray, intersection);
@@ -208,13 +241,16 @@ Ray GetRefractionRay(Ray ray, RayIntersection intersection)
   {
     refractionRay = GetReflectionRay(ray, intersection);
     refractionRay.voxel = ray.voxel;
+    refractionRay.energy = ray.energy;
   }
   else
   {
-    refractionRay.dir = RandomizeDirection(refractionRay.dir, refractionRay.pos, 0.0025);
+    refractionRay.dir = RandomizeDirection(refractionRay.dir, refractionRay.pos, 0.00025, 0);
+    refractionRay.energy = ray.energy;
+    if(!HasVoxel(ray.voxel))
+      refractionRay.energy *= 1-GetColor(intersection).a;
   }
   refractionRay.rayLength = intersection.rayLength;
-  refractionRay.energy = ray.energy;
   refractionRay.reflectionDepth = ray.reflectionDepth; 
   return refractionRay;
 }
@@ -228,34 +264,6 @@ bool TestCube(vec3 currentPos, vec3 dir, vec3 centerPos, vec3 size)
      (currentPos.y < centerPos.y - size.y / 2 && dir.y < 0) ||
      (currentPos.z > centerPos.z + size.z / 2 && dir.z > 0) ||
      (currentPos.z < centerPos.z - size.z / 2 && dir.z < 0));
-}
-
-vec2 GetTextureCoordinate(vec2 voxelPlane, int x, int y)
-{
-  vec2 texCoord = voxelPlane - floor(voxelPlane);
-  texCoord = vec2(texCoord.x + x, 1 - texCoord.y + y) * u_AtlasTextureSize / u_AtlasSize;
-  return vec2(texCoord.x, 1.0f - texCoord.y);
-}
-
-vec4 GetColor(RayIntersection intersection)
-{
-  Material mat = GetMaterial(intersection.voxel);
-#ifndef _COLOR_ONLY
-  vec2 texCoord = GetTextureCoordinate(
-      vec2(
-        intersection.collisionPoint[intersection.texAxis1],
-        intersection.collisionPoint[intersection.texAxis2]),
-      mat.texX,mat.texY);
-  return texture(u_TextureUnit, texCoord);
-#else
-  return mat.color;
-#endif
-}
-
-vec3 RayColor(Ray ray, RayIntersection intersection, vec3 color, float brightness)
-{
-  vec4 rayColor = GetColor(intersection);
-  return color * (1.0 - ray.energy) + rayColor.rgb * ray.energy * rayColor.a * brightness;
 }
 
 RayIntersection RayMarchShadow(inout Ray ray)
@@ -422,19 +430,14 @@ RayIntersection TraceWithShadow(Ray ray, inout vec3 color)
   return intersection;
 }
 
-#define MAX_REFLECTIONS 1
-#define MAX_TRANSPARENCIES 2
-
 void main()
 {
-  Ray ray = Ray(v_Near + vec3(u_Size*0.5), normalize(v_Dir), 0, 1, 0.0, 0);
   vec3 color = vec3(0,0,0);
 
-  // max reflections + max transparencies
   Ray[MAX_REFLECTIONS + MAX_TRANSPARENCIES + 1] stack;
-  stack[0] = ray;
-  int stackSize = 1;
+  stack[0] = Ray(v_Near + vec3(u_Size*0.5), RandomizeDirection(normalize(v_Dir), v_Near, 0.00120, u_Time), 0, 1.0, 0.0, 0);
 
+  int stackSize = 1;
   int transparencies = 0;
 
   while(stackSize > 0)

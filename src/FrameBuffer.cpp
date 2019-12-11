@@ -32,6 +32,10 @@ const Greet::Texture2D& FrameBuffer::GetTexture() const
 void FrameBuffer::Enable()
 {
   GLCall(glBindFramebuffer(GL_FRAMEBUFFER, fbo));
+}
+
+void FrameBuffer::Clear()
+{
   GLCall(glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT));
 }
 
@@ -40,14 +44,19 @@ void FrameBuffer::Disable()
   GLCall(glBindFramebuffer(GL_FRAMEBUFFER, 0));
 }
 
-void FrameBuffer::Resize(uint width, uint height)
+void FrameBuffer::Resize(uint _width, uint _height)
 {
-  texture = Greet::Texture2D(width, height, Greet::TextureParams(Greet::TextureFilter::NEAREST, Greet::TextureWrap::NONE, Greet::TextureInternalFormat::RGB));
-  GLCall(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture.GetTexId(), 0));
+  if(width != _width || height != _height)
+  {
+    width = _width;
+    height = _height;
+    texture = Greet::Texture2D(width, height, Greet::TextureParams(Greet::TextureFilter::NEAREST, Greet::TextureWrap::NONE, Greet::TextureInternalFormat::RGB));
+    GLCall(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture.GetTexId(), 0));
 
-  GLCall(glBindRenderbuffer(GL_RENDERBUFFER, renderBuffer));
-  GLCall(glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height));
-  GLCall(glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, renderBuffer));
+    GLCall(glBindRenderbuffer(GL_RENDERBUFFER, renderBuffer));
+    GLCall(glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height));
+    GLCall(glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, renderBuffer));
+  }
 }
 
 Greet::Ref<FrameBuffer> FrameBuffer::Create(uint width, uint height)
