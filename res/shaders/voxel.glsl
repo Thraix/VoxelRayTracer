@@ -32,6 +32,7 @@ struct Ray
   float energy;
   float voxel;
   int reflectionDepth;
+  int transparencyDepth;
 };
 
 struct RayIntersection
@@ -217,8 +218,9 @@ Ray GetReflectionRay(Ray ray, RayIntersection intersection)
   reflectionRay.dir = RandomizeDirection(ray.dir, intersection.collisionPoint, 0.001, 0);
   reflectionRay.dir[intersection.collisionDir] = -reflectionRay.dir[intersection.collisionDir];
   reflectionRay.rayLength = intersection.rayLength;
-  reflectionRay.energy = ray.energy * Fresnel(ray, intersection);
+  reflectionRay.energy = 0.5;//ray.energy * Fresnel(ray, intersection);
   reflectionRay.reflectionDepth = ray.reflectionDepth+1; 
+  reflectionRay.transparencyDepth = ray.transparencyDepth; 
   return reflectionRay;
 }
 
@@ -252,6 +254,7 @@ Ray GetRefractionRay(Ray ray, RayIntersection intersection)
   }
   refractionRay.rayLength = intersection.rayLength;
   refractionRay.reflectionDepth = ray.reflectionDepth; 
+  refractionRay.transparencyDepth = ray.transparencyDepth+1; 
   return refractionRay;
 }
 
@@ -266,7 +269,7 @@ bool TestCube(vec3 currentPos, vec3 dir, vec3 centerPos, vec3 size)
      (currentPos.z < centerPos.z - size.z / 2 && dir.z < 0));
 }
 
-RayIntersection RayMarchShadow(inout Ray ray)
+bool RayMarchShadow(inout Ray ray)
 {
   float rayLength = ray.rayLength;
   vec3 currentPos = ray.pos;
@@ -284,7 +287,7 @@ RayIntersection RayMarchShadow(inout Ray ray)
   {
     if(!TestCube(currentPos, ray.dir, vec3(u_Size*0.5), vec3(u_Size)))
     {
-      return RayIntersection(0, vec3(0,0,0), 0, 0, 1, 2, false);
+      return false;
     }
     float tMin = min(t.x, min(t.y, t.z));
     t -= tMin;
@@ -307,15 +310,15 @@ RayIntersection RayMarchShadow(inout Ray ray)
             intersectionAxis[index][2], true);
 
       Material mat = GetMaterial(voxel);
-      if(!mat.transparent && GetColor(intersection).a == 1)
+      if(!mat.transparent)
       {
-        return intersection;
+        return true;
       }
     }
     t[intersectionAxis[index][0]] = ((currentPos + stepDir - ray.pos) / ray.dir - (rayLength - ray.rayLength))[intersectionAxis[index][0]];
 
   }
-  return RayIntersection(0, vec3(0,0,0), 0, 0, 1, 2, false);
+  return false;
 }
 
 RayIntersection RayMarch(inout Ray ray)
@@ -405,11 +408,11 @@ RayIntersection TraceWithShadow(Ray ray, inout vec3 color)
   {
     // Shadow ray
     Ray shadowRay = GetShadowRay(ray, intersection);
-    RayIntersection shadowIntersection = RayMarchShadow(shadowRay);
+    bool inShadow = RayMarchShadow(shadowRay);
       vec3 normal = vec3(0,0,0);
       normal[intersection.collisionDir] = -sign(ray.dir[intersection.collisionDir]);
     float brightness = 0.0f;
-    if(shadowIntersection.found)
+    if(inShadow)
     {
       // Full shadow
       brightness = ambient;
@@ -435,10 +438,9 @@ void main()
   vec3 color = vec3(0,0,0);
 
   Ray[MAX_REFLECTIONS + MAX_TRANSPARENCIES + 1] stack;
-  stack[0] = Ray(v_Near + vec3(u_Size*0.5), RandomizeDirection(normalize(v_Dir), v_Near, 0.00120, u_Time), 0, 1.0, 0.0, 0);
+  stack[0] = Ray(v_Near + vec3(u_Size*0.5), RandomizeDirection(normalize(v_Dir), v_Near, 0.00120, u_Time), 0, 1.0, 0.0, 0, 0);
 
   int stackSize = 1;
-  int transparencies = 0;
 
   while(stackSize > 0)
   {
@@ -451,13 +453,10 @@ void main()
       {
         stack[stackSize++] = GetReflectionRay(ray, intersection);
       }
-      if(material.transparent && transparencies < MAX_TRANSPARENCIES && GetColor(intersection).a != 1)
+      if(material.transparent && ray.transparencyDepth < MAX_TRANSPARENCIES && GetColor(intersection).a != 1)
       {
         stack[stackSize++] = GetRefractionRay(ray, intersection);
-        transparencies++;
       }
-      if(HasVoxel(ray.voxel))
-        transparencies--;
     }
   }
   f_Color = vec4(color, 1.0);
