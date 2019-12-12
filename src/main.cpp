@@ -4,6 +4,11 @@
 
 #include <thread>
 
+//#define _GLASS_CUBE
+#define _TERRAIN
+/* #define _REFRACTION */
+//#define _HIGH_PERFORMANCE
+
 using namespace Greet;
 
 class Cam
@@ -136,13 +141,21 @@ class AppScene : public Scene
     FrameBuffer* currentFrameBuffer = nullptr;
     FrameBuffer* rayTraceFrameBuffer = nullptr;
 
-    float timer = 0;
     Ref<uint> texture3D;
     Cam cam;
     CamController camController;
     Ref<Atlas> atlas;
     uint size;
     uint temporalSamples = 1;
+
+    bool dayNightCycle = true;
+    float timeOfDay = 0.0;
+    float dayTime = 50.0;
+
+    float temporalAlpha = 1.0;
+    float rayNoise = 0.0;
+    float reflectionNoise = 0.0;
+    float refractionNoise = 0.0;
 
     AppScene()
       : cam{Mat4::ProjectionMatrix(RenderCommand::GetViewportAspect(), 90, 0.01,100.0f)}, camController{cam}
@@ -160,6 +173,17 @@ class AppScene : public Scene
       Vec2 screen[4] = {
         {-1.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, -1.0f}, {-1.0f, -1.0f}};
       uint indices[6] = {0, 2, 1, 0, 3, 2};
+#ifdef _HIGH_PERFORMANCE
+      atlas.reset(new Atlas(32,16));
+      atlas->Enable(0);
+      atlas->AddTexture("stone", "res/textures/stone.png");
+      atlas->AddTexture("dirt", "res/textures/dirt.png");
+      atlas->AddTexture("glass", "res/textures/glass.png");
+      atlas->AddTexture("grass", "res/textures/grass.png");
+      atlas->Disable();
+      size = 32;
+      std::vector<float> noise = Greet::Noise::GenNoise(size, size, 5, 10, 10, 0.5, 0, 0);
+#else
       atlas.reset(new Atlas(256,128));
       atlas->Enable(0);
       atlas->AddTexture("stone", "res/textures/stone128.png");
@@ -167,6 +191,9 @@ class AppScene : public Scene
       atlas->AddTexture("glass", "res/textures/glass128.png");
       atlas->AddTexture("grass", "res/textures/grass128.png");
       atlas->Disable();
+      size = 16;
+      std::vector<float> noise = Greet::Noise::GenNoise(size, size, 5, 10, 10, 0.125, 0, 0);
+#endif
 
       vao = VertexArray::Create();
       vbo = VertexBuffer::CreateStatic(screen, sizeof(screen));
@@ -179,18 +206,17 @@ class AppScene : public Scene
       vao->SetIndexBuffer(ibo);
       ibo->Disable();
       vao->Disable();
-      size = 32;
       //std::vector<float> data = Greet::Noise::GenNoise(size, size, size, 3, 4, 4, 4, 2, 0, 0, 0);
       /* static std::vector<float> GenNoise(uint width, uint height, uint length,
        * uint octave, uint stepX, uint stepY, uint stepZ, float persistance, int
        * offsetX, int offsetY, int offsetZ); */
-      std::vector<float> noise = Greet::Noise::GenNoise(size, size, 5, 10, 10, 0.5, 0, 0);
       rayTracingShader = Shader::FromFile("res/shaders/voxel.glsl");
       filterShader = Shader::FromFile("res/shaders/temporal.glsl");
       passthroughShader  = Shader::FromFile("res/shaders/passthrough.glsl");
       uint tex;
       GLCall(glGenTextures(1, &tex));
       std::vector<byte> data(size * size * size);
+#ifdef _TERRAIN
       int i = 0;
       for(int z = 0; z < size; z++)
       {
@@ -204,28 +230,62 @@ class AppScene : public Scene
           data[x + grassLevel * size + z * size * size] = 3;
         }
       }
-      for(int z = 2; z < size-2; z++)
+      if(size <= 64)
       {
+        for(int z = 2; z < size-2; z++)
+        {
           for(int y = noise[z * size] * size+1; y < size; y++)
           {
-          data[y * size + z * size * size] = 2;
+            data[y * size + z * size * size] = 2;
           }
-      }
-      for(int z = 2; z < size-2; z++)
-      {
+        }
+        for(int z = 2; z < size-2; z++)
+        {
           for(int y = noise[size - 4 + z * size] * size+1; y < size-4; y++)
           {
             data[size - 4 + y * size + z * size * size] = 2;
           }
+        }
       }
 
       for(int z = 2; z < size-2; z++)
       {
-          for(int y = noise[size -1 +  z * size] * size+1; y < size-4; y++)
-          {
-            data[size-1 + y * size + z * size * size] = 3;
-          }
+        for(int y = noise[size -1 +  z * size] * size+1; y < size-4; y++)
+        {
+          data[size-1 + y * size + z * size * size] = 3;
+        }
       }
+#elif defined(_GLASS_CUBE)
+      for(int i = 0; i < size; i++)
+      {
+        for(int j = 0; j < size; j++)
+        {
+          data[size-1 + i * size + j * size * size] = 2;
+          data[i * size + j * size * size] = 2;
+          data[i + j * size + (size-1) * size * size] = 2;
+          data[i + j * size] = 2;
+          data[i + (size-1) * size + j * size * size] = 2;
+          data[i + j * size * size] = 2;
+        }
+      }
+      data[size/2 + size/2 * size + size/2 * size * size] = 3;
+#elif defined(_REFRACTION)
+
+      data[size/2 + size/2 * size + size / 2 * size * size] = 2;
+
+      for(int i = size/4; i < 3 * size / 4; i++)
+      {
+        for(int j =size/4;  j < 3 * size / 4; j++)
+        {
+          data[size-1 + i * size + j * size * size] = 3;
+          data[i * size + j * size * size] = 3;
+          data[i + j * size + (size-1) * size * size] = 3;
+          data[i + j * size] = 3;
+          data[i + (size-1) * size + j * size * size] = 3;
+          data[i + j * size * size] = 3;
+        }
+      }
+#endif
       /* std::vector<byte> data(size * size * size); */
       /* for(int z = 0;z<size;z++) */
       /* { */
@@ -262,6 +322,7 @@ class AppScene : public Scene
 
     virtual void Render() const override
     {
+      RenderCommand::PushViewportStack({0,0}, rayTraceFrameBuffer->GetSize(), true);
       rayTraceFrameBuffer->Enable();
       rayTraceFrameBuffer->Clear();
       TextureManager::Get2D("stone").Enable(0);
@@ -278,11 +339,14 @@ class AppScene : public Scene
       rayTracingShader->SetUniform1i("u_TextureUnit", 0);
       rayTracingShader->SetUniform1i("u_ChunkTexUnit", 1);
       rayTracingShader->SetUniform1i("u_SkyboxUnit", 2);
+      rayTracingShader->SetUniform1f("u_RayNoise", rayNoise);
+      rayTracingShader->SetUniform1f("u_ReflectionNoise", reflectionNoise);
+      rayTracingShader->SetUniform1f("u_RefractionNoise", refractionNoise);
       static float i = 0;
       i++;
       rayTracingShader->SetUniform1f("u_Time", i);
       Vec2 dir = Vec2{1,0};
-      dir.RotateR(timer * 0.125);
+      dir.RotateR(timeOfDay * M_PI * 2 / dayTime);
       rayTracingShader->SetUniform3f("u_SunDir", Vec3<float>{dir.y, dir.x, 0.2}.Normalize());
       vao->Enable();
       glBeginQuery(GL_TIME_ELAPSED, 1);
@@ -304,6 +368,7 @@ class AppScene : public Scene
       filterShader->Enable();
       filterShader->SetUniform1i("u_TextureUnitNew", 0);
       filterShader->SetUniform1i("u_TextureUnitOld", 1);
+      filterShader->SetUniform1f("u_Alpha", temporalAlpha);
       filterShader->SetUniform1i("u_Samples", temporalSamples);
       rayTraceFrameBuffer->GetTexture().Enable(0);
       lastFrameBuffer->GetTexture().Enable(1);
@@ -311,6 +376,7 @@ class AppScene : public Scene
       vao->Render(DrawType::TRIANGLES, 6);
       vao->Disable();
       currentFrameBuffer->Disable();
+      RenderCommand::PopViewportStack();
 
       // Passthrough
       passthroughShader->Enable();
@@ -330,7 +396,12 @@ class AppScene : public Scene
 
     virtual void Update(float timeElapsed) override
     {
-      timer += timeElapsed;
+      if(dayNightCycle)
+      {
+        timeOfDay += timeElapsed;
+        while(timeOfDay > dayTime)
+          timeOfDay -= dayTime;
+      }
       camController.Update(timeElapsed);
     }
 
@@ -351,6 +422,13 @@ class AppScene : public Scene
           std::swap(lastFrameBuffer, rayTraceFrameBuffer);
           temporalSamples = 1;
         }
+        else if(e.GetButton() == GREET_KEY_F1)
+        {
+
+          lastFrameBuffer->Enable();
+          Utils::Screenshot(lastFrameBuffer->GetWidth(), lastFrameBuffer->GetHeight());
+          lastFrameBuffer->Disable();
+        }
       }
 
     }
@@ -358,12 +436,19 @@ class AppScene : public Scene
     void ViewportResize(ViewportResizeEvent& event) override
     {
       cam.SetProjectionMatrix(Mat4::ProjectionMatrix(event.GetWidth() / event.GetHeight(), 90, 0.01f, 100.0f));
+#ifdef _HIGH_PERFORMANCE
+      int width = 400;
+      int height = 400;
+#else
+      int width = event.GetWidth();
+      int height = event.GetHeight();
+#endif
       fbo1->Enable();
-      fbo1->Resize(event.GetWidth(), event.GetHeight());
+      fbo1->Resize(width, height);
       fbo2->Enable();
-      fbo2->Resize(event.GetWidth(), event.GetHeight());
+      fbo2->Resize(width, height);
       fbo3->Enable();
-      fbo3->Resize(event.GetWidth(), event.GetHeight());
+      fbo3->Resize(width, height);
       FrameBuffer::Disable();
     }
 };
@@ -372,6 +457,7 @@ class Application : public App
 {
   public:
     Label* fpsLabel = nullptr;
+    Slider* daySlider = nullptr;
     SceneView* sceneView = nullptr;
     AppScene* appScene;
 
@@ -401,6 +487,42 @@ class Application : public App
         sceneView = frame->GetComponentByName<SceneView>("scene");
         if (!sceneView)
           Log::Error("Couldn't find SceneView");
+        using namespace std::placeholders;
+        Button* button = frame->GetComponentByName<Button>("ToggleDayNight");
+        if (!button)
+          Log::Error("Couldn't find ToggleDayNight button");
+        else
+          button->SetOnClickCallback(std::bind(&Application::OnDayNightCyclePress, std::ref(*this), _1));
+        button = frame->GetComponentByName<Button>("MakeDay");
+        if (!button)
+          Log::Error("Couldn't find MakeDay button");
+        else
+          button->SetOnClickCallback(std::bind(&Application::OnMakeDayPress, std::ref(*this), _1));
+        daySlider = frame->GetComponentByName<Slider>("TimeSlider");
+        if (!daySlider)
+          Log::Error("Couldn't find TimeSlider");
+        else
+          daySlider->SetOnValueChangeCallback(std::bind(&Application::ChangeTimeOfDay, std::ref(*this), _1, _2, _3));
+        Slider* slider = frame->GetComponentByName<Slider>("TemporalSlider");
+        if (!slider )
+          Log::Error("Couldn't find TemporalSlider");
+        else
+          slider ->SetOnValueChangeCallback(std::bind(&Application::ChangeTemporalAlpha, std::ref(*this), _1, _2, _3));
+        slider = frame->GetComponentByName<Slider>("RayNoiseSlider");
+        if (!slider )
+          Log::Error("Couldn't find RayNoiseSlider");
+        else
+          slider ->SetOnValueChangeCallback(std::bind(&Application::ChangeRayNoise, std::ref(*this), _1, _2, _3));
+        slider = frame->GetComponentByName<Slider>("ReflectionNoiseSlider");
+        if (!slider )
+          Log::Error("Couldn't find ReflectionNoiseSlider");
+        else
+          slider ->SetOnValueChangeCallback(std::bind(&Application::ChangeReflectionNoise, std::ref(*this), _1, _2, _3));
+        slider = frame->GetComponentByName<Slider>("RefractionNoiseSlider");
+        if (!slider )
+          Log::Error("Couldn't find RefractionNoiseSlider");
+        else
+          slider ->SetOnValueChangeCallback(std::bind(&Application::ChangeRefractionNoise, std::ref(*this), _1, _2, _3));
       }
       else
       {
@@ -426,10 +548,51 @@ class Application : public App
     {}
 
     void Update(float timeElapsed) override
-    {}
+    {
+      if(daySlider)
+        daySlider->SetValue(appScene->timeOfDay / appScene->dayTime);
+    }
 
     void OnEvent(Event& e) override
     {}
+
+    void OnDayNightCyclePress(Component* button)
+    {
+      appScene->dayNightCycle = !appScene->dayNightCycle;
+    }
+
+    void OnMakeDayPress(Component* button)
+    {
+      appScene->timeOfDay = 0.9 * appScene->dayTime;
+    }
+
+    void ChangeTimeOfDay(Component* slider, float oldValue, float newValue)
+    {
+      appScene->timeOfDay = newValue * appScene->dayTime;
+    }
+
+    void ChangeTemporalAlpha(Component* slider, float oldValue, float newValue)
+    {
+      appScene->temporalAlpha = newValue;
+    }
+
+    void ChangeRayNoise(Component* slider, float oldValue, float newValue)
+    {
+      appScene->rayNoise = newValue;
+      Log::Info("Ray: ", newValue);
+    }
+
+    void ChangeReflectionNoise(Component* slider, float oldValue, float newValue)
+    {
+      appScene->reflectionNoise = newValue;
+      Log::Info("Reflection: ", newValue);
+    }
+
+    void ChangeRefractionNoise(Component* slider, float oldValue, float newValue)
+    {
+      appScene->refractionNoise = newValue;
+      Log::Info("Refraction: ", newValue);
+    }
 };
 
 int main()

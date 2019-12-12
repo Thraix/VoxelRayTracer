@@ -3,6 +3,7 @@
 #include <common/Types.h>
 #include <common/Memory.h>
 #include <graphics/textures/Texture2D.h>
+#include <math/Vec2.h>
 
 class FrameBuffer
 {
@@ -20,6 +21,10 @@ class FrameBuffer
     void Resize(uint width, uint height);
 
     const Greet::Texture2D& GetTexture() const;
+
+    const Greet::Vec2 GetSize() const { return Greet::Vec2{(float)width, (float)height}; }
+    uint GetWidth() const { return width; }
+    uint GetHeight() const { return height; }
     void Enable();
     void Clear();
     static void Disable();

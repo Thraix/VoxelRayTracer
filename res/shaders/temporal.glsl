@@ -8,14 +8,14 @@ in vec2 texCoord;
 
 out vec4 color;
 uniform int u_Samples = 1;
+uniform float u_Alpha = 1.0;
 
 void main()
 {
-  float alpha = 1.0;
   vec4 averageColor = texture(u_TextureUnitOld, texCoord);
   vec4 newColor = texture(u_TextureUnitNew, texCoord);
   /* color = averageColor + (newColor - averageColor) / u_Samples; */
-  color = alpha * newColor + (1 - alpha) * averageColor;
+  color = u_Alpha * newColor + (1 - u_Alpha) * averageColor;
 }
 
 //vertex
