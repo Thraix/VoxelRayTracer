@@ -4,8 +4,8 @@
 
 #include <thread>
 
-//#define _GLASS_CUBE
-#define _TERRAIN
+#define _GLASS_CUBE
+/* #define _TERRAIN */
 /* #define _REFRACTION */
 //#define _HIGH_PERFORMANCE
 
@@ -239,11 +239,11 @@ class AppScene : public Scene
             data[y * size + z * size * size] = 2;
           }
         }
-        for(int z = 2; z < size-2; z++)
+        for(int x = 2; x < size-1; x++)
         {
-          for(int y = noise[size - 4 + z * size] * size+1; y < size-4; y++)
+          for(int y = noise[x * size + size - 4] * size+1; y < size-4; y++)
           {
-            data[size - 4 + y * size + z * size * size] = 2;
+            data[x + y * size + (size-4) * size * size] = 2;
           }
         }
       }

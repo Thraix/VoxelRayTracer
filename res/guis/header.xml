@@ -101,6 +101,7 @@
   <Label font="noto" fontSize="14" color="#90a4ae">Controls:</Label>
   <Label font="noto" fontSize="14" color="#90a4ae">C: Reset camera</Label>
   <Label font="noto" fontSize="14" color="#90a4ae">F: Clear FrameBuffers</Label>
+  <Label font="noto" fontSize="14" color="#90a4ae">F1: Screenshot</Label>
 </Container>
 <SceneView name="scene" width="fill_parent" height="fill_parent"/>
 </Container>
