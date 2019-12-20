@@ -4,10 +4,10 @@
 
 #include <thread>
 
-#define _GLASS_CUBE
-/* #define _TERRAIN */
+/* #define _GLASS_CUBE */
+#define _TERRAIN
 /* #define _REFRACTION */
-//#define _HIGH_PERFORMANCE
+/* #define _HIGH_PERFORMANCE */
 
 using namespace Greet;
 

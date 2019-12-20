@@ -360,6 +360,7 @@ RayIntersection RayMarch(inout Ray ray)
       // Inside transparent voxel
       vec3 oldDir = ray.dir;
       ray = GetRefractionRay(ray, intersection);
+      ray.transparencyDepth--;
       if(ray.voxel == rayVoxel)
       {
         internalReflection++;
@@ -392,7 +393,7 @@ vec3 GetSkyboxColor(Ray ray, vec3 color)
   return mix(skyboxColor, color, 1.0 - ray.energy);
 }
 
-RayIntersection TraceWithShadow(Ray ray, inout vec3 color)
+RayIntersection TraceWithShadow(inout Ray ray, inout vec3 color)
 {
   RayIntersection intersection = RayMarch(ray);
   if(intersection.found)
