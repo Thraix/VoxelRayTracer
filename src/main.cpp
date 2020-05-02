@@ -191,7 +191,7 @@ class AppScene : public Scene
       atlas->AddTexture("glass", "res/textures/glass128.png");
       atlas->AddTexture("grass", "res/textures/grass128.png");
       atlas->Disable();
-      size = 16;
+      size = 128;
       std::vector<float> noise = Greet::Noise::GenNoise(size, size, 5, 10, 10, 0.125, 0, 0);
 #endif
 
@@ -325,11 +325,11 @@ class AppScene : public Scene
       RenderCommand::PushViewportStack({0,0}, rayTraceFrameBuffer->GetSize(), true);
       rayTraceFrameBuffer->Enable();
       rayTraceFrameBuffer->Clear();
-      TextureManager::Get2D("stone").Enable(0);
+      TextureManager::LoadTexture2D("res/textures/stone.meta")->Enable(0);
       atlas->Enable(0);
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_3D, *texture3D);
-      TextureManager::Get3D("skybox").Enable(2);
+      TextureManager::LoadCubeMap("res/textures/skybox.meta")->Enable(2);
       rayTracingShader->Enable();
       rayTracingShader->SetUniformMat4("u_PVInvMatrix", cam.GetInvPVMatrix());
       rayTracingShader->SetUniformMat4("u_ViewMatrix", cam.GetViewMatrix());
@@ -370,8 +370,8 @@ class AppScene : public Scene
       filterShader->SetUniform1i("u_TextureUnitOld", 1);
       filterShader->SetUniform1f("u_Alpha", temporalAlpha);
       filterShader->SetUniform1i("u_Samples", temporalSamples);
-      rayTraceFrameBuffer->GetTexture().Enable(0);
-      lastFrameBuffer->GetTexture().Enable(1);
+      rayTraceFrameBuffer->GetTexture()->Enable(0);
+      lastFrameBuffer->GetTexture()->Enable(1);
       vao->Enable();
       vao->Render(DrawType::TRIANGLES, 6);
       vao->Disable();
@@ -381,7 +381,7 @@ class AppScene : public Scene
       // Passthrough
       passthroughShader->Enable();
       passthroughShader->SetUniform1i("u_TextureUnit", 0);
-      currentFrameBuffer->GetTexture().Enable(0);
+      currentFrameBuffer->GetTexture()->Enable(0);
       vao->Enable();
       vao->Render(DrawType::TRIANGLES, 6);
       vao->Disable();
@@ -468,7 +468,6 @@ class Application : public App
 
     void Init() override
     {
-      Loaders::LoadTextures("res/loaders/textures.json");
       FontManager::Add(new FontContainer("res/fonts/NotoSansUI-Regular.ttf", "noto"));
       InitGUI();
       InitScene();
@@ -546,6 +545,18 @@ class Application : public App
 
     void Render() override
     {}
+    /*
+    void RenderGUI()
+    {
+    GUI::BeginFrame("Frame");
+      GUI::BeginContainer();
+        GUI::Button();
+        EndContainer();
+        GUI::EndFrame();
+    }
+
+
+     */
 
     void Update(float timeElapsed) override
     {

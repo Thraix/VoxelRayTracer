@@ -5,11 +5,11 @@
 FrameBuffer::FrameBuffer(uint width, uint height)
   : width{width}, height{height}
 {
-  texture = Greet::Texture2D(width, height, Greet::TextureParams(Greet::TextureFilter::NEAREST, Greet::TextureWrap::NONE, Greet::TextureInternalFormat::RGB));
+  texture = Greet::Texture2D::Create(width, height, Greet::TextureParams(Greet::TextureFilter::NEAREST, Greet::TextureWrap::NONE, Greet::TextureInternalFormat::RGB));
   GLCall(glGenFramebuffers(1, &fbo));
   GLCall(glGenRenderbuffers(1, &renderBuffer));
   GLCall(glBindFramebuffer(GL_FRAMEBUFFER, fbo));
-  GLCall(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture.GetTexId(), 0));
+  GLCall(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture->GetTexId(), 0));
 
   GLCall(glBindRenderbuffer(GL_RENDERBUFFER, renderBuffer));
   GLCall(glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height));
@@ -24,7 +24,7 @@ FrameBuffer::~FrameBuffer()
   GLCall(glDeleteRenderbuffers(1, &renderBuffer));
 }
 
-const Greet::Texture2D& FrameBuffer::GetTexture() const
+const Greet::Ref<Greet::Texture2D>& FrameBuffer::GetTexture() const
 {
   return texture;
 }
@@ -50,8 +50,8 @@ void FrameBuffer::Resize(uint _width, uint _height)
   {
     width = _width;
     height = _height;
-    texture = Greet::Texture2D(width, height, Greet::TextureParams(Greet::TextureFilter::NEAREST, Greet::TextureWrap::NONE, Greet::TextureInternalFormat::RGB));
-    GLCall(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture.GetTexId(), 0));
+    texture = Greet::Texture2D::Create(width, height, Greet::TextureParams(Greet::TextureFilter::NEAREST, Greet::TextureWrap::NONE, Greet::TextureInternalFormat::RGB));
+    GLCall(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture->GetTexId(), 0));
 
     GLCall(glBindRenderbuffer(GL_RENDERBUFFER, renderBuffer));
     GLCall(glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height));

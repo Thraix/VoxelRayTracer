@@ -7,7 +7,7 @@
 
 class FrameBuffer
 {
-  Greet::Texture2D texture;
+  Greet::Ref<Greet::Texture2D> texture;
   uint fbo;
   uint renderBuffer;
   uint width;
@@ -20,7 +20,7 @@ class FrameBuffer
     virtual ~FrameBuffer();
     void Resize(uint width, uint height);
 
-    const Greet::Texture2D& GetTexture() const;
+    const Greet::Ref<Greet::Texture2D>& GetTexture() const;
 
     const Greet::Vec2 GetSize() const { return Greet::Vec2{(float)width, (float)height}; }
     uint GetWidth() const { return width; }
