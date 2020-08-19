@@ -3,4 +3,3 @@ bin
 core
 .ycm_extra_conf.py
 *.gobj
-Makefile
