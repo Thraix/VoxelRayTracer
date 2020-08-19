@@ -1,2 +1,3 @@
-filepath=res/textures.glass.png
+[texture2d]
+filepath=res/textures/glass.png
 filter=nearest

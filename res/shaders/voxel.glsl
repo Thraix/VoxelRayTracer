@@ -13,7 +13,6 @@ out vec4 f_Color;
 
 uniform sampler2D u_TextureUnit;
 uniform sampler3D u_ChunkTexUnit;
-uniform samplerCube u_SkyboxUnit;
 
 uniform float u_MaxRayLength = 100;
 uniform int u_Size;

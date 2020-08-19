@@ -329,7 +329,6 @@ class AppScene : public Scene
       atlas->Enable(0);
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_3D, *texture3D);
-      TextureManager::LoadCubeMap("res/textures/skybox.meta")->Enable(2);
       rayTracingShader->Enable();
       rayTracingShader->SetUniformMat4("u_PVInvMatrix", cam.GetInvPVMatrix());
       rayTracingShader->SetUniformMat4("u_ViewMatrix", cam.GetViewMatrix());
@@ -338,7 +337,6 @@ class AppScene : public Scene
       rayTracingShader->SetUniform1i("u_AtlasTextureSize", atlas->GetTextureSize());
       rayTracingShader->SetUniform1i("u_TextureUnit", 0);
       rayTracingShader->SetUniform1i("u_ChunkTexUnit", 1);
-      rayTracingShader->SetUniform1i("u_SkyboxUnit", 2);
       rayTracingShader->SetUniform1f("u_RayNoise", rayNoise);
       rayTracingShader->SetUniform1f("u_ReflectionNoise", reflectionNoise);
       rayTracingShader->SetUniform1f("u_RefractionNoise", refractionNoise);

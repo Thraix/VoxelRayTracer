@@ -1,0 +1,25 @@
+<makegen>
+  <configuration name="Release">
+    <cflag>-g</cflag>
+    <define>_DEBUG</define>
+    <dependency>../Greet-Engine-Port/Greet-core/</dependency>
+    <generatehfile>false</generatehfile>
+    <hfilename>VoxelTracer.h</hfilename>
+    <includedir>../Greet-Engine-Port/deps/includes/</includedir>
+    <includedir>../Greet-Engine-Port/Greet-core/src/</includedir>
+    <library>greet</library>
+    <library>GL</library>
+    <library>GLEW</library>
+    <library>glfw</library>
+    <library>freetype</library>
+    <library>freeimage</library>
+    <librarydir>../Greet-Engine-Port/Greet-core/bin/</librarydir>
+    <outputdir>bin/</outputdir>
+    <outputname>voxeltracer.x86_64</outputname>
+    <outputtype>executable</outputtype>
+    <projectname>VoxelTracer</projectname>
+    <srcdir>src/</srcdir>
+  </configuration>
+  <target>Release</target>
+  <version>v1.3.0</version>
+</makegen>
