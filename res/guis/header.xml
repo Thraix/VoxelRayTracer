@@ -1,108 +1,29 @@
-<Frame name="FrameHeader" width="fill_parent" height="fill_parent" backgroundColor="#263238" spacing="0">
-  <Container verticalAlign="false" width="fill_parent" height="wrap_content" padding="10 5" backgroundColor="#263238" borderColor="#90a4ae" border="1" spacing="0">
-    <Label height="fill_parent" name="title" color="#90a4ae" font="noto" fontSize="14">VoxelTracer </Label>
-    <Label height="fill_parent" font="noto" color="#90a4ae" fontSize="14">FPS: </Label>
-    <Label height="fill_parent" name="fpsCounter" color="#90a4ae" font="noto" fontSize="14">00</Label>
+<Frame name="FrameHeader" width="fill_parent" height="fill_parent" styling="res/styling/styling.meta">
+  <Container name="headerContainer">
+    <Label height="fill_parent" name="title">VoxelTracer </Label>
+    <Label height="fill_parent">FPS: </Label>
+    <Label height="fill_parent" name="fpsCounter">00</Label>
   </Container>
-  <Container verticalAlign="false" width="fill_parent" height="fill_parent" spacing="0">
-    <Container spacing="5" width="200" height="fill_parent" padding="10">
-      <Label font="noto" fontSize="14" color="#90a4ae">Time</Label>
-      <Slider
-        name="TimeSlider"
-        backgroundColor="#37474f" 
-        borderColor="#455a64" 
-        border="1"
-        width="fill_parent" height="25" margin="0"
-        minValue="0" maxValue="1" defaultValue="0.5" stepSize="0.001" indicatorInside="true">
-      <Component
-        borderColor="#263238" 
-        backgroundColor="#455a64" 
-        width="5" height="fill_parent" margin="0"
-        border="1"
-        />
-    </Slider>
-    <Button width="fill_parent" height="20" name="ToggleDayNight"
-      backgroundColor="#37474f" borderColor="#455a64" 
-      hoverbackgroundColor="#37474f" hoverborderColor="#455a64" 
-      color="#90a4ae" fontSize="14" font="noto"
-      hoverborder="1"
-      radius="8" borderRadius="9"
-      hoverradius="5" hoverborderRadius="9"
-      border="1 1 1 1">Toggle Time</Button>
-    <Button width="fill_parent" height="20" name="MakeDay"
-      backgroundColor="#37474f" borderColor="#455a64" 
-      hoverbackgroundColor="#37474f" hoverborderColor="#455a64" 
-      color="#90a4ae" fontSize="14" font="noto"
-      hoverborder="1"
-      radius="8" borderRadius="9"
-      hoverradius="5" hoverborderRadius="9"
-      border="1 1 1 1">Make day</Button>
-    <Label font="noto" fontSize="14" color="#90a4ae">Ray noise</Label>
-    <Slider
-      name="RayNoiseSlider"
-      backgroundColor="#37474f" 
-      borderColor="#455a64" 
-      border="1"
-      width="fill_parent" height="25" margin="0"
-      minValue="0" maxValue="0.05" defaultValue="0" stepSize="0" indicatorInside="true">
-    <Component
-      borderColor="#263238" 
-      backgroundColor="#455a64" 
-      width="5" height="fill_parent" margin="0"
-      border="1"
-      />
-  </Slider>
-  <Label font="noto" fontSize="14" color="#90a4ae">Reflection noise</Label>
-  <Slider
-    name="ReflectionNoiseSlider"
-    backgroundColor="#37474f" 
-    borderColor="#455a64" 
-    border="1"
-    width="fill_parent" height="25" margin="0"
-    minValue="0" maxValue="0.05" defaultValue="0" stepSize="0" indicatorInside="true">
-  <Component
-    borderColor="#263238" 
-    backgroundColor="#455a64" 
-    width="5" height="fill_parent" margin="0"
-    border="1"
-    />
-</Slider>
-<Label font="noto" fontSize="14" color="#90a4ae">Refraction noise</Label>
-<Slider
-  name="RefractionNoiseSlider"
-  backgroundColor="#37474f" 
-  borderColor="#455a64" 
-  border="1"
-  width="fill_parent" height="25" margin="0"
-  minValue="0" maxValue="0.01" defaultValue="0" stepSize="0.0" indicatorInside="true">
-<Component
-  borderColor="#263238" 
-  backgroundColor="#455a64" 
-  width="5" height="fill_parent" margin="0"
-  border="1"
-  />
-    </Slider>
-    <Label font="noto" fontSize="14" color="#90a4ae">Temporal Filter</Label>
-    <Slider
-      name="TemporalSlider"
-      backgroundColor="#37474f" 
-      borderColor="#455a64" 
-      border="1"
-      width="fill_parent" height="25" margin="0"
-      minValue="0" maxValue="1" defaultValue="1.0" stepSize="0.001" indicatorInside="true">
-    <Component
-      borderColor="#263238" 
-      backgroundColor="#455a64" 
-      width="5" height="fill_parent" margin="0"
-      border="1"
-      />
-  </Slider>
+  <Container vertical="false" width="fill_parent" height="fill_parent" spacing="0">
+    <Container width="200" height="fill_parent" padding="10">
+      <Label>Time</Label>
+      <Slider name="TimeSlider" minValue="0" maxValue="1" defaultValue="0.5" stepSize="0.001" indicatorInside="true"/>
+      <Button name="ToggleDayNight">Toggle Time</Button>
+      <Button name="MakeDay">Make day</Button>
+      <Label>Ray noise</Label>
+      <Slider name="RayNoiseSlider" minValue="0" maxValue="0.05" defaultValue="0" stepSize="0" indicatorInside="true"/>
+      <Label>Reflection noise</Label>
+      <Slider name="ReflectionNoiseSlider" minValue="0" maxValue="0.05" defaultValue="0" stepSize="0" indicatorInside="true"/>
+      <Label>Refraction noise</Label>
+      <Slider name="RefractionNoiseSlider" minValue="0" maxValue="0.01" defaultValue="0" stepSize="0.0" indicatorInside="true"/>
+      <Label>Temporal Filter</Label>
+      <Slider name="TemporalSlider" minValue="0" maxValue="1" defaultValue="1.0" stepSize="0.001" indicatorInside="true"/>
 
-  <Label font="noto" fontSize="14" color="#90a4ae">Controls:</Label>
-  <Label font="noto" fontSize="14" color="#90a4ae">C: Reset camera</Label>
-  <Label font="noto" fontSize="14" color="#90a4ae">F: Clear FrameBuffers</Label>
-  <Label font="noto" fontSize="14" color="#90a4ae">F1: Screenshot</Label>
-</Container>
-<SceneView name="scene" width="fill_parent" height="fill_parent"/>
-</Container>
+      <Label>Controls:</Label>
+      <Label>C: Reset camera</Label>
+      <Label>F: Clear FrameBuffers</Label>
+      <Label>F1: Screenshot</Label>
+    </Container>
+    <SceneView name="scene" width="fill_parent" height="fill_parent"/>
+  </Container>
 </Frame>

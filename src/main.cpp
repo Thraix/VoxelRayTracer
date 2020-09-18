@@ -89,7 +89,7 @@ class CamController
     {
       Vec3<float> rot = cam.GetRotation();
       Vec3<float> lastRot = rot;
-      float rotationSpeed = 180 * timeElapsed;
+      float rotationSpeed = 3 * timeElapsed;
       if (Input::IsKeyDown(GREET_KEY_UP))
         rot.x += rotationSpeed;
       if (Input::IsKeyDown(GREET_KEY_DOWN))
@@ -99,7 +99,7 @@ class CamController
       if (Input::IsKeyDown(GREET_KEY_RIGHT))
         rot.y -= rotationSpeed;
 
-      Vec2 posDelta{0};
+      Vec2f posDelta{0};
       float zDelta = 0;
       float moveSpeed = 5 * timeElapsed;
       if (Input::IsKeyDown(GREET_KEY_W))
@@ -117,7 +117,7 @@ class CamController
 
       posDelta.Rotate(-rot.y);
 
-      if(posDelta != Vec2{0} || zDelta != 0)
+      if(posDelta != Vec2f{0} || zDelta != 0)
         cam.SetPosition(cam.GetPosition() + Vec3<float>{posDelta.x, zDelta, posDelta.y});
       if(rot != lastRot)
         cam.SetRotation(rot);
@@ -158,7 +158,7 @@ class AppScene : public Scene
     float refractionNoise = 0.0;
 
     AppScene()
-      : cam{Mat4::ProjectionMatrix(RenderCommand::GetViewportAspect(), 90, 0.01,100.0f)}, camController{cam}
+      : cam{Mat4::Perspective(RenderCommand::GetViewportAspect(), 90, 0.01,100.0f)}, camController{cam}
     {
       fbo1 = FrameBuffer::Create(1440, 810);
       fbo2 = FrameBuffer::Create(1440, 810);
@@ -170,7 +170,7 @@ class AppScene : public Scene
 
       cam.SetPosition({-3.45, 2.17, 3.53});
       cam.SetRotation({-33.00, -48.00, 0.00});
-      Vec2 screen[4] = {
+      Vec2f screen[4] = {
         {-1.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, -1.0f}, {-1.0f, -1.0f}};
       uint indices[6] = {0, 2, 1, 0, 3, 2};
 #ifdef _HIGH_PERFORMANCE
@@ -343,8 +343,8 @@ class AppScene : public Scene
       static float i = 0;
       i++;
       rayTracingShader->SetUniform1f("u_Time", i);
-      Vec2 dir = Vec2{1,0};
-      dir.RotateR(timeOfDay * M_PI * 2 / dayTime);
+      Vec2f dir = Vec2f{1.0f,0.0f};
+      dir.Rotate(timeOfDay * M_PI * 2 / dayTime);
       rayTracingShader->SetUniform3f("u_SunDir", Vec3<float>{dir.y, dir.x, 0.2}.Normalize());
       vao->Enable();
       glBeginQuery(GL_TIME_ELAPSED, 1);
@@ -433,7 +433,7 @@ class AppScene : public Scene
 
     void ViewportResize(ViewportResizeEvent& event) override
     {
-      cam.SetProjectionMatrix(Mat4::ProjectionMatrix(event.GetWidth() / event.GetHeight(), 90, 0.01f, 100.0f));
+      cam.SetProjectionMatrix(Mat4::Perspective(event.GetWidth() / event.GetHeight(), 90, 0.01f, 100.0f));
 #ifdef _HIGH_PERFORMANCE
       int width = 400;
       int height = 400;
@@ -466,17 +466,18 @@ class Application : public App
 
     void Init() override
     {
-      FontManager::Add(new FontContainer("res/fonts/NotoSansUI-Regular.ttf", "noto"));
-      InitGUI();
+      FontManager::Add("noto", FontContainer("res/fonts/NotoSansUI-Regular.ttf"));
       InitScene();
+      InitGUI();
     }
 
     void InitGUI()
     {
       GUIScene* scene = new GUIScene(new GUIRenderer());
-      scene->AddFrame(FrameFactory::GetFrame("res/guis/header.xml"));
+      Frame* frame = FrameFactory::GetFrame("res/guis/header.xml");
+      scene->AddFrameQueued(frame);
 
-      if (auto frame = scene->GetFrame("FrameHeader"))
+      if (frame)
       {
         fpsLabel = frame->GetComponentByName<Label>("fpsCounter");
         if (!fpsLabel)
@@ -484,6 +485,8 @@ class Application : public App
         sceneView = frame->GetComponentByName<SceneView>("scene");
         if (!sceneView)
           Log::Error("Couldn't find SceneView");
+        else
+          sceneView->GetSceneManager().Add3DScene(appScene, "appScene");
         using namespace std::placeholders;
         Button* button = frame->GetComponentByName<Button>("ToggleDayNight");
         if (!button)
@@ -532,7 +535,6 @@ class Application : public App
     void InitScene()
     {
       appScene = new AppScene();
-      sceneView->GetSceneManager().Add3DScene(appScene, "appScene");
     }
 
     void Tick() override

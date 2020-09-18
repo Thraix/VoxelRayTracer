@@ -22,7 +22,7 @@ class FrameBuffer
 
     const Greet::Ref<Greet::Texture2D>& GetTexture() const;
 
-    const Greet::Vec2 GetSize() const { return Greet::Vec2{(float)width, (float)height}; }
+    const Greet::Vec2f GetSize() const { return Greet::Vec2f{(float)width, (float)height}; }
     uint GetWidth() const { return width; }
     uint GetHeight() const { return height; }
     void Enable();

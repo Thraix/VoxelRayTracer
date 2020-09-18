@@ -17,7 +17,7 @@ Not entirely sure if these work anymore, was a long time since I used Ubuntu. Bu
 ```
 
 ## Running
-To compile and run the application you need to also download my [engine](https://github.com/Thraix/Greet-Engine-Port) (verified to work on engine commit `26da0106fa6172faa74c5ccb562ee654d8656f1c`) and place it in the same directory as this project (ie `~/Documents/VoxelRayTracer` and `~/Documents/Greet-Engine-Port`) then if you use [MakeGen](https://github.com/Thraix/MakeGen) simply run
+To compile and run the application you need to also download my [engine](https://github.com/Thraix/Greet-Engine-Port) (verified to work on engine commit `9f8de935de83f998befbb06b9ff9e5c93bd8f232`) and place it in the same directory as this project (ie `~/Documents/VoxelRayTracer` and `~/Documents/Greet-Engine-Port`) then if you use [MakeGen](https://github.com/Thraix/MakeGen) simply run
 ```
 makegen run
 ```
